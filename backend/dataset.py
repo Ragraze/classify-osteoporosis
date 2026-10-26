@@ -4,7 +4,6 @@ import warnings
 
 from PIL import Image
 
-
 LABELS = ("normal", "osteoporosis")
 EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
@@ -17,21 +16,38 @@ def image_metadata(path, size, modified):
             with Image.open(path) as image:
                 if image.format not in ("PNG", "JPEG"):
                     return None
-                metadata = {"width": image.width, "height": image.height, "format": image.format}
+                metadata = {
+                    "width": image.width,
+                    "height": image.height,
+                    "format": image.format,
+                }
                 image.verify()
                 return metadata
-    except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+    except (
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ):
         return None
 
 
 def find_image(root, label, filename):
-    if label not in LABELS or Path(filename).name != filename or Path(filename).suffix.lower() not in EXTENSIONS:
+    if (
+        label not in LABELS
+        or Path(filename).name != filename
+        or Path(filename).suffix.lower() not in EXTENSIONS
+    ):
         return None
     directory = Path(root) / label
     if directory.is_symlink():
         return None
     path = directory / filename
-    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(directory.resolve()):
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or not path.resolve().is_relative_to(directory.resolve())
+    ):
         return None
     return path
 

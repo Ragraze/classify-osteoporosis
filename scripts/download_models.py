@@ -8,13 +8,12 @@ from pathlib import Path
 import sys
 from urllib.request import Request, urlopen
 
-
 ROOT = Path(__file__).resolve().parent.parent
 VARIANTS = ("nano", "small", "medium", "large", "xlarge")
 
 
 def download(variant):
-    pointer = ROOT / f"train-{variant}" / "weights" / "best.pt"
+    pointer = ROOT / "research" / f"train-{variant}" / "weights" / "best.pt"
     if pointer.stat().st_size > 1024:
         print(f"{variant}: bobot Git LFS sudah tersedia.")
         return
@@ -26,8 +25,21 @@ def download(variant):
     if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == oid:
         print(f"{variant}: checksum bobot lokal valid.")
         return
-    payload = json.dumps({"operation": "download", "transfers": ["basic"], "objects": [{"oid": oid, "size": size}]}).encode()
-    request = Request("https://github.com/Ragraze/classify-osteoporosis.git/info/lfs/objects/batch", data=payload, headers={"Content-Type": "application/vnd.git-lfs+json", "Accept": "application/vnd.git-lfs+json"})
+    payload = json.dumps(
+        {
+            "operation": "download",
+            "transfers": ["basic"],
+            "objects": [{"oid": oid, "size": size}],
+        }
+    ).encode()
+    request = Request(
+        "https://github.com/Ragraze/classify-osteoporosis.git/info/lfs/objects/batch",
+        data=payload,
+        headers={
+            "Content-Type": "application/vnd.git-lfs+json",
+            "Accept": "application/vnd.git-lfs+json",
+        },
+    )
     with urlopen(request, timeout=60) as response:
         item = json.load(response)["objects"][0]
     if "error" in item:
@@ -37,15 +49,21 @@ def download(variant):
     digest = hashlib.sha256()
     received = 0
     try:
-        with urlopen(Request(action["href"], headers=action.get("header", {})), timeout=120) as response, partial.open("wb") as stream:
+        with urlopen(
+            Request(action["href"], headers=action.get("header", {})), timeout=120
+        ) as response, partial.open("wb") as stream:
             while chunk := response.read(1024 * 1024):
                 received += len(chunk)
                 if received > size:
-                    raise RuntimeError("Ukuran unduhan melebihi ukuran pointer Git LFS.")
+                    raise RuntimeError(
+                        "Ukuran unduhan melebihi ukuran pointer Git LFS."
+                    )
                 digest.update(chunk)
                 stream.write(chunk)
         if received != size or digest.hexdigest() != oid:
-            raise RuntimeError("Ukuran atau checksum unduhan tidak cocok dengan pointer Git LFS.")
+            raise RuntimeError(
+                "Ukuran atau checksum unduhan tidak cocok dengan pointer Git LFS."
+            )
         os.replace(partial, target)
     finally:
         partial.unlink(missing_ok=True)

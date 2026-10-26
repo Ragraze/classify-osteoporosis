@@ -6,18 +6,36 @@ import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, url_for
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    request,
+    send_file,
+    send_from_directory,
+    url_for,
+)
 from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from . import dataset, storage
-from .models import VARIANTS, ModelUnavailable, Predictor, catalog, runtime_installed
+from .models import (
+    VARIANTS,
+    ModelUnavailable,
+    Predictor,
+    catalog,
+    runtime_installed,
+    training_path,
+)
 
 
 def create_app(test_config=None):
     root = Path(__file__).resolve().parent.parent
-    instance = Path(os.environ.get("OSTEO_INSTANCE_PATH", str(root / "instance"))).resolve()
+    instance = Path(
+        os.environ.get("OSTEO_INSTANCE_PATH", str(root / "instance"))
+    ).resolve()
     app = Flask(__name__, static_folder=None, instance_path=str(instance))
     app.config.from_mapping(
         MAX_CONTENT_LENGTH=10 * 1024 * 1024,
@@ -50,13 +68,20 @@ def create_app(test_config=None):
 
     @app.errorhandler(HTTPException)
     def http_error(error):
-        messages = {404: "Halaman atau data tidak ditemukan.", 405: "Metode permintaan tidak diizinkan.", 413: "Ukuran unggahan melebihi batas 10 MB."}
+        messages = {
+            404: "Halaman atau data tidak ditemukan.",
+            405: "Metode permintaan tidak diizinkan.",
+            413: "Ukuran unggahan melebihi batas 10 MB.",
+        }
         return jsonify(error=messages.get(error.code, error.description)), error.code
 
     @app.errorhandler(Exception)
     def unexpected_error(error):
         app.logger.exception("Permintaan gagal")
-        return jsonify(error="Permintaan gagal. Periksa log backend lalu coba lagi."), 500
+        return (
+            jsonify(error="Permintaan gagal. Periksa log backend lalu coba lagi."),
+            500,
+        )
 
     @app.get("/api/health")
     def health():
@@ -68,7 +93,9 @@ def create_app(test_config=None):
 
     @app.get("/api/dashboard")
     def dashboard():
-        return jsonify(**storage.summary(database), models=catalog(app.config["REPO_ROOT"]))
+        return jsonify(
+            **storage.summary(database), models=catalog(app.config["REPO_ROOT"])
+        )
 
     @app.get("/api/dataset")
     def dataset_images():
@@ -81,12 +108,24 @@ def create_app(test_config=None):
             if page < 1 or not 1 <= per_page <= 48:
                 raise ValueError
         except ValueError:
-            abort(400, description="Halaman harus positif dan jumlah per halaman antara 1 dan 48.")
+            abort(
+                400,
+                description="Halaman harus positif dan jumlah per halaman antara 1 dan 48.",
+            )
         items, unreadable = dataset.catalog(app.config["DATASET_DIR"], label)
-        selected = items[(page - 1) * per_page:page * per_page]
+        selected = items[(page - 1) * per_page : page * per_page]
         for item in selected:
-            item["image_url"] = url_for("dataset_image", label=label, filename=item["filename"])
-        return jsonify(items=selected, label=label, total=len(items), unreadable=unreadable, page=page, per_page=per_page)
+            item["image_url"] = url_for(
+                "dataset_image", label=label, filename=item["filename"]
+            )
+        return jsonify(
+            items=selected,
+            label=label,
+            total=len(items),
+            unreadable=unreadable,
+            page=page,
+            per_page=per_page,
+        )
 
     @app.get("/api/dataset/<label>/<filename>")
     def dataset_image(label, filename):
@@ -113,7 +152,11 @@ def create_app(test_config=None):
         model = request.args.get("model", "")
         if label not in ("", "normal", "osteoporosis") or model not in ("", *VARIANTS):
             abort(400, description="Filter kelas atau model tidak valid.")
-        return {"search": request.args.get("search", "")[:200], "label": label, "model": model}
+        return {
+            "search": request.args.get("search", "")[:200],
+            "label": label,
+            "model": model,
+        }
 
     @app.get("/api/predictions")
     def predictions():
@@ -123,13 +166,26 @@ def create_app(test_config=None):
             if page < 1 or not 1 <= per_page <= 100:
                 raise ValueError
         except ValueError:
-            abort(400, description="Halaman harus positif dan jumlah per halaman antara 1 dan 100.")
-        return jsonify(storage.history(database, **filters(), page=page, per_page=per_page))
+            abort(
+                400,
+                description="Halaman harus positif dan jumlah per halaman antara 1 dan 100.",
+            )
+        return jsonify(
+            storage.history(database, **filters(), page=page, per_page=per_page)
+        )
 
     @app.get("/api/predictions/export")
     def export():
         selected = filters()
-        columns = ["id", "filename", "model", "label", "confidence", "inference_ms", "created_at"]
+        columns = [
+            "id",
+            "filename",
+            "model",
+            "label",
+            "confidence",
+            "inference_ms",
+            "created_at",
+        ]
 
         def generate():
             output = io.StringIO(newline="")
@@ -143,14 +199,28 @@ def create_app(test_config=None):
                     output.seek(0)
                     output.truncate(0)
                     values = [row[column] for column in columns]
-                    values = ["'" + value if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")) else value for value in values]
+                    values = [
+                        (
+                            "'" + value
+                            if isinstance(value, str)
+                            and value.lstrip().startswith(("=", "+", "-", "@"))
+                            else value
+                        )
+                        for value in values
+                    ]
                     writer.writerow(values)
                     yield output.getvalue()
                 if page * 100 >= result["total"]:
                     break
                 page += 1
 
-        return Response(generate(), mimetype="text/csv", headers={"Content-Disposition": 'attachment; filename="riwayat-analisis.csv"'})
+        return Response(
+            generate(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": 'attachment; filename="riwayat-analisis.csv"'
+            },
+        )
 
     @app.post("/api/predictions")
     def predict():
@@ -166,12 +236,28 @@ def create_app(test_config=None):
                 image = Image.open(file.stream)
                 if image.format not in ("PNG", "JPEG"):
                     abort(400, description="Format citra harus PNG atau JPEG.")
-                if image.width < 32 or image.height < 32 or image.width * image.height > 25_000_000:
-                    abort(400, description="Dimensi citra minimal 32 × 32 dan maksimal 25 megapiksel.")
+                if (
+                    image.width < 32
+                    or image.height < 32
+                    or image.width * image.height > 25_000_000
+                ):
+                    abort(
+                        400,
+                        description="Dimensi citra minimal 32 × 32 dan maksimal 25 megapiksel.",
+                    )
                 image.load()
                 image = ImageOps.exif_transpose(image).convert("RGB")
-        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
-            abort(400, description="Citra tidak dapat dibaca. Gunakan berkas PNG atau JPEG yang valid.")
+        except (
+            UnidentifiedImageError,
+            OSError,
+            ValueError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
+        ):
+            abort(
+                400,
+                description="Citra tidak dapat dibaca. Gunakan berkas PNG atau JPEG yang valid.",
+            )
         try:
             result = predictor.predict(image, variant)
         except ModelUnavailable as error:
@@ -221,9 +307,14 @@ def create_app(test_config=None):
 
     @app.get("/api/models/<variant>/artifacts/<filename>")
     def artifact(variant, filename):
-        if variant not in VARIANTS or filename not in ("confusion_matrix.png", "results.png"):
+        if variant not in VARIANTS or filename not in (
+            "confusion_matrix.png",
+            "results.png",
+        ):
             abort(404)
-        return send_from_directory(Path(app.config["REPO_ROOT"]) / f"train-{variant}", filename)
+        return send_from_directory(
+            training_path(app.config["REPO_ROOT"], variant), filename
+        )
 
     @app.get("/")
     @app.get("/<path:path>")
@@ -232,8 +323,17 @@ def create_app(test_config=None):
             abort(404)
         dist = Path(app.config["FRONTEND_DIR"])
         if not (dist / "index.html").is_file():
-            return jsonify(message="Backend aktif. Jalankan frontend dengan npm run dev atau buat build frontend terlebih dahulu."), 200
-        if path and (dist / path).is_file() and (dist / path).resolve().is_relative_to(dist.resolve()):
+            return (
+                jsonify(
+                    message="Backend aktif. Jalankan frontend dengan npm run dev atau buat build frontend terlebih dahulu."
+                ),
+                200,
+            )
+        if (
+            path
+            and (dist / path).is_file()
+            and (dist / path).resolve().is_relative_to(dist.resolve())
+        ):
             return send_from_directory(dist, path)
         return send_file(dist / "index.html")
 

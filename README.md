@@ -2,6 +2,26 @@
 
 Dashboard untuk eksperimen klasifikasi citra X-ray lutut dengan YOLOv8, backend Flask, dan frontend React. Proyek awal merupakan tugas akhir pengolahan citra digital di Fakultas Ilmu Komputer, Universitas Brawijaya.
 
+## Struktur proyek
+
+```text
+backend/              API Flask, katalog dataset/model, inferensi, dan penyimpanan
+frontend/
+  src/pages/          Analisis, Evaluasi, Dataset, dan Riwayat
+  src/components/     Komponen bersama, grafik, dan dialog
+  e2e/                Pengujian browser
+dataset/              Citra sumber menurut kelas
+research/
+  classify-osteoporosis.ipynb
+  train-*/            Metrik, grafik, dan pointer bobot hasil pelatihan
+  val-*/              Artefak validasi penelitian asli
+scripts/              Server development, unduhan model, dan server pengujian
+tests/                Pengujian API
+docs/                 Catatan desain dan verifikasi
+```
+
+`.venv/`, `.models/`, `instance/`, `frontend/node_modules/`, `frontend/dist/`, dan `artifacts/` berisi dependensi, bobot lokal, riwayat, atau hasil proses yang diabaikan Git. Notebook dan artefak penelitian asli disimpan di `research/`; path lingkungan pelatihan di dalam notebook tetap merupakan rekaman eksperimen asli.
+
 ## Menjalankan secara lokal
 
 Prasyarat: Python 3.10+, Node.js 22.12+ atau versi LTS yang lebih baru, dan npm.
@@ -45,7 +65,7 @@ Flask menyajikan build React dan API melalui <http://127.0.0.1:5000>. Inferensi 
 ## Data dan model
 
 - Lima varian YOLOv8: Nano, Small, Medium, Large, dan Xlarge.
-- Metrik dan kurva berasal dari `train-*/results.csv`. Nilai terbaik merupakan maksimum akurasi top-1 pada validasi selama pelatihan, bukan hasil uji klinis atau akurasi pada unggahan baru.
+- Metrik dan kurva berasal dari `research/train-*/results.csv`. Label sumber pada grafik tetap memakai nama run asli `train-*/results.csv`, relatif terhadap `research/`. Nilai terbaik merupakan maksimum akurasi top-1 pada validasi selama pelatihan, bukan hasil uji klinis atau akurasi pada unggahan baru.
 - Epoch pada tampilan mengikuti penomoran CSV asli, mulai dari satu. Jumlah epoch adalah jumlah baris CSV.
 - Artefak confusion matrix berasal dari folder pelatihan asli, bukan dihitung dari unggahan pengguna.
 - Kelas model: `normal` dan `osteoporosis`. Probabilitas adalah skor keluaran model, bukan estimasi risiko klinis yang terkalibrasi.

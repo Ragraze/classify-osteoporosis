@@ -13,12 +13,19 @@ class FixedPredictor:
     def predict(self, image, variant):
         assert image.mode == "RGB"
         assert variant == "nano"
-        return {"label": "normal", "confidence": 0.8, "probabilities": {"normal": 0.8, "osteoporosis": 0.2}, "inference_ms": 12.5}
+        return {
+            "label": "normal",
+            "confidence": 0.8,
+            "probabilities": {"normal": 0.8, "osteoporosis": 0.2},
+            "inference_ms": 12.5,
+        }
 
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app({"TESTING": True, "DATA_DIR": tmp_path, "PREDICTOR": FixedPredictor()})
+    return create_app(
+        {"TESTING": True, "DATA_DIR": tmp_path, "PREDICTOR": FixedPredictor()}
+    )
 
 
 @pytest.fixture
@@ -34,7 +41,9 @@ def image_data(format="PNG", size=(64, 64)):
 
 
 def upload(client, filename="xray.png"):
-    return client.post("/api/predictions", data={"image": (image_data(), filename), "model": "nano"})
+    return client.post(
+        "/api/predictions", data={"image": (image_data(), filename), "model": "nano"}
+    )
 
 
 @pytest.fixture
@@ -61,7 +70,10 @@ def test_dataset_lists_readable_images_by_class_and_page(dataset_client):
     assert first["total"] == 2
     assert first["unreadable"] == 1
     assert len(first["items"]) == len(second["items"]) == 1
-    assert {first["items"][0]["filename"], second["items"][0]["filename"]} == {"xray.png", "second.JPG"}
+    assert {first["items"][0]["filename"], second["items"][0]["filename"]} == {
+        "xray.png",
+        "second.JPG",
+    }
     osteoporosis = dataset_client.get("/api/dataset?label=osteoporosis").json
     assert osteoporosis["total"] == 1 and osteoporosis["unreadable"] == 0
     assert osteoporosis["items"][0]["filename"] == "knee.JPEG"
@@ -77,14 +89,26 @@ def test_dataset_serves_original_and_thumbnail(dataset_client):
     assert dataset_client.get("/api/dataset/normal/broken.png").status_code == 422
 
 
-@pytest.mark.parametrize("path", ["normal/outside.jpg", "normal/xray.png:Zone.Identifier", "normal/archive.zip", "normal/missing.png", "other/xray.png", "normal/..%2Foutside.jpg"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "normal/outside.jpg",
+        "normal/xray.png:Zone.Identifier",
+        "normal/archive.zip",
+        "normal/missing.png",
+        "other/xray.png",
+        "normal/..%2Foutside.jpg",
+    ],
+)
 def test_dataset_rejects_unavailable_or_unsupported_paths(dataset_client, path):
     response = dataset_client.get("/api/dataset/" + path)
     assert response.status_code == 404
     assert response.is_json
 
 
-@pytest.mark.parametrize("query", ["label=other", "page=0", "page=invalid", "per_page=0", "per_page=49"])
+@pytest.mark.parametrize(
+    "query", ["label=other", "page=0", "page=invalid", "per_page=0", "per_page=49"]
+)
 def test_dataset_rejects_invalid_queries(dataset_client, query):
     assert dataset_client.get("/api/dataset?" + query).status_code == 400
 
@@ -130,7 +154,13 @@ def test_upload_persists_result_image_and_statistics(client, app):
     assert stats["osteoporosis"] == 0
     assert stats["avg_confidence"] == 0.8
     assert stats["activity"][-1]["count"] == 1
-    second = create_app({"TESTING": True, "DATA_DIR": app.config["DATA_DIR"], "PREDICTOR": FixedPredictor()})
+    second = create_app(
+        {
+            "TESTING": True,
+            "DATA_DIR": app.config["DATA_DIR"],
+            "PREDICTOR": FixedPredictor(),
+        }
+    )
     assert second.test_client().get("/api/predictions").json["total"] == 1
 
 
@@ -153,7 +183,13 @@ def test_delete_removes_only_selected_history_and_image(client, app):
     assert [item["id"] for item in stats["recent"]] == [kept["id"]]
     csv_data = client.get("/api/predictions/export").data.decode("utf-8-sig")
     assert "remove.png" not in csv_data and "keep.png" in csv_data
-    second = create_app({"TESTING": True, "DATA_DIR": app.config["DATA_DIR"], "PREDICTOR": FixedPredictor()})
+    second = create_app(
+        {
+            "TESTING": True,
+            "DATA_DIR": app.config["DATA_DIR"],
+            "PREDICTOR": FixedPredictor(),
+        }
+    )
     assert second.test_client().get("/api/predictions").json["total"] == 1
     assert client.delete(f"/api/predictions/{removed['id']}").status_code == 404
 
@@ -191,13 +227,16 @@ def test_delete_image_failure_keeps_record(client, app, monkeypatch):
     assert client.get("/api/predictions").json["total"] == 1
 
 
-@pytest.mark.parametrize("payload,message", [
-    ({}, "Pilih citra"),
-    ({"model": "../nano", "image": (io.BytesIO(b"invalid"), "x.png")}, "model"),
-    ({"image": (io.BytesIO(b"not an image"), "fake.png")}, "tidak dapat dibaca"),
-    ({"image": (image_data("GIF"), "image.gif")}, "Format"),
-    ({"image": (image_data(size=(20, 20)), "tiny.png")}, "Dimensi"),
-])
+@pytest.mark.parametrize(
+    "payload,message",
+    [
+        ({}, "Pilih citra"),
+        ({"model": "../nano", "image": (io.BytesIO(b"invalid"), "x.png")}, "model"),
+        ({"image": (io.BytesIO(b"not an image"), "fake.png")}, "tidak dapat dibaca"),
+        ({"image": (image_data("GIF"), "image.gif")}, "Format"),
+        ({"image": (image_data(size=(20, 20)), "tiny.png")}, "Dimensi"),
+    ],
+)
 def test_rejects_invalid_uploads(client, payload, message):
     response = client.post("/api/predictions", data=payload)
     assert response.status_code == 400
@@ -206,7 +245,10 @@ def test_rejects_invalid_uploads(client, payload, message):
 
 
 def test_upload_limit_is_json(client):
-    response = client.post("/api/predictions", data={"image": (io.BytesIO(b"x" * (11 * 1024 * 1024)), "large.png")})
+    response = client.post(
+        "/api/predictions",
+        data={"image": (io.BytesIO(b"x" * (11 * 1024 * 1024)), "large.png")},
+    )
     assert response.status_code == 413
     assert "10 MB" in response.json["error"]
 
@@ -216,7 +258,9 @@ def test_valid_image_larger_than_multipart_buffer_is_accepted(client):
     Image.effect_noise((700, 700), 100).convert("RGB").save(stream, format="PNG")
     assert stream.tell() > 64 * 1024
     stream.seek(0)
-    response = client.post("/api/predictions", data={"image": (stream, "large-valid.png"), "model": "nano"})
+    response = client.post(
+        "/api/predictions", data={"image": (stream, "large-valid.png"), "model": "nano"}
+    )
     assert response.status_code == 201
 
 
@@ -250,13 +294,21 @@ def test_search_filters_pagination_and_csv(client):
     assert len(rows) == 1 and rows[0]["filename"] == "knee-second.png"
 
 
-@pytest.mark.parametrize("query", ["page=0", "page=hi", "per_page=101", "label=fake", "model=unknown"])
+@pytest.mark.parametrize(
+    "query", ["page=0", "page=hi", "per_page=101", "label=fake", "model=unknown"]
+)
 def test_invalid_history_filters(client, query):
     assert client.get("/api/predictions?" + query).status_code == 400
 
 
 def test_unknown_api_paths_stay_json(client):
-    for path in ("/api", "/api/unknown", "/api/predictions/missing", "/api/predictions/missing/image", "/api/models/nano/artifacts/args.yaml"):
+    for path in (
+        "/api",
+        "/api/unknown",
+        "/api/predictions/missing",
+        "/api/predictions/missing/image",
+        "/api/models/nano/artifacts/args.yaml",
+    ):
         response = client.get(path)
         assert response.status_code == 404
         assert response.is_json
@@ -269,7 +321,7 @@ def test_training_artifact_is_served(client):
 
 
 def test_predictor_rejects_lfs_pointer_without_loading_runtime(tmp_path):
-    weights = tmp_path / "train-nano" / "weights"
+    weights = tmp_path / "research" / "train-nano" / "weights"
     weights.mkdir(parents=True)
     (weights / "best.pt").write_text("version https://git-lfs.github.com/spec/v1\n")
     with pytest.raises(ModelUnavailable, match="download_models"):
@@ -281,7 +333,9 @@ def test_frontend_build_and_assets_are_served(tmp_path):
     dist.mkdir()
     (dist / "index.html").write_text("<html>Dashboard</html>")
     (dist / "app.js").write_text("console.log('app')")
-    app = create_app({"TESTING": True, "DATA_DIR": tmp_path / "data", "FRONTEND_DIR": dist})
+    app = create_app(
+        {"TESTING": True, "DATA_DIR": tmp_path / "data", "FRONTEND_DIR": dist}
+    )
     client = app.test_client()
     assert b"Dashboard" in client.get("/").data
     assert b"Dashboard" in client.get("/models").data
