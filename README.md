@@ -7,6 +7,8 @@ The dashboard lets you compare training metrics across five model variants, brow
 ## Project structure
 
 ```text
+Dockerfile            React build, model download, and CPU inference container
+.dockerignore         Files excluded from the Docker build context
 backend/              Flask API, dataset/model catalogs, inference, and storage
 frontend/
   src/pages/          Analysis, Evaluation, Dataset, and History pages
@@ -63,6 +65,36 @@ gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 --timeout 120 'backend:cr
 ```
 
 Flask serves both the React build and the API at <http://127.0.0.1:5000>. Inference runs on the CPU. The backend loads a model on first use and keeps one model in memory at a time, so the first prediction takes longer. A single worker avoids duplicating large model weights in memory.
+
+## Docker
+
+Build and run from the repository root:
+
+```bash
+docker build -t classify-osteoporosis .
+docker run --rm --name classify-osteoporosis \
+  -p 127.0.0.1:5000:5000 \
+  -v osteoporosis-data:/app/instance \
+  classify-osteoporosis
+```
+
+Open <http://127.0.0.1:5000>. The image includes the React production build, Flask API, source dataset, training metrics, and all five model weights. The build downloads and verifies weights from Git LFS; local Python/Node dependencies and local weights are not required. The first build needs internet access and downloads the CPU inference runtime as well as the model weights.
+
+For a smaller image with only Nano weights, use:
+
+```bash
+docker build --build-arg MODEL_VARIANT=nano -t classify-osteoporosis:nano .
+```
+
+Other supported values are `small`, `medium`, `large`, and `xlarge`. Metrics for all variants remain available; inference requires the selected variant's weights. The default is `all`.
+
+The container runs as an unprivileged user and serves the dashboard and API through one Gunicorn worker with four threads. Its health check calls `/api/health`. The named volume `osteoporosis-data` preserves SQLite history and uploaded images when the container is removed. Local `instance/` data is excluded from the image and is not imported automatically.
+
+Stop the container from another terminal:
+
+```bash
+docker stop classify-osteoporosis
+```
 
 ## Data and models
 
@@ -123,7 +155,7 @@ Browser checks also cover Axe accessibility scans with light and dark system pre
 
 Design decisions and contrast measurements are recorded in [design notes](docs/design-notes.md). The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons); its license is included in [third-party notices](docs/third-party-notices.md).
 
-Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), and [Vite](https://vite.dev/guide/).
+Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), [Vite](https://vite.dev/guide/), and [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/).
 
 ## License
 
