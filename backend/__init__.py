@@ -21,6 +21,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from . import dataset, storage
+from .api_docs import docs
 from .models import (
     VARIANTS,
     ModelUnavailable,
@@ -37,6 +38,7 @@ def create_app(test_config=None):
         os.environ.get("OSTEO_INSTANCE_PATH", str(root / "instance"))
     ).resolve()
     app = Flask(__name__, static_folder=None, instance_path=str(instance))
+    app.register_blueprint(docs)
     app.config.from_mapping(
         MAX_CONTENT_LENGTH=10 * 1024 * 1024,
         MAX_FORM_MEMORY_SIZE=512 * 1024,

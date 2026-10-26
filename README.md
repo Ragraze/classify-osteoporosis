@@ -30,6 +30,19 @@ Git ignores local dependencies and generated data in `.venv/`, `.models/`, `inst
 
 Requirements: Python 3.10+, Node.js 22.12+ or a newer LTS release, and npm.
 
+Install everything and start the app from the repository root:
+
+```bash
+npm install
+npm run dev
+```
+
+`npm install` creates `.venv/`, installs the CPU inference runtime and Python dependencies, runs `npm ci` for the frontend, and downloads all five model weights into `.models/`. The first setup needs internet access. Python must be available as `python3` on Linux/macOS or `python` on Windows. If Python lacks `ensurepip`, setup uses the system pip to bootstrap the virtual environment; install `python3-venv` or provide system pip if neither is available. If installation was interrupted or lifecycle scripts were disabled, run `npm run setup` to finish it.
+
+Open <http://127.0.0.1:5173>. To build the frontend from the root, run `npm run build`. The Docker instructions below provide an alternative that does not install local Python or Node dependencies.
+
+For manual setup instead:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -110,6 +123,14 @@ docker stop classify-osteoporosis
 This application is intended for local experiments. Classification results are not clinical diagnoses. The app has no authentication or data isolation between users. Add access controls before exposing a server that stores sensitive images.
 
 ## API
+
+Interactive Swagger documentation is available at <http://127.0.0.1:5173/api/docs>
+in development and <http://127.0.0.1:5000/api/docs> in Docker or the single-server
+setup. The OpenAPI 3.0 JSON document is served at `/api/openapi.json`.
+Swagger assets are bundled with the Python dependency, so opening the docs does
+not require a CDN. **Try it out** calls the same server: uploading stores a real
+prediction, and DELETE permanently removes a prediction and its image.
+The UI configuration follows the [Swagger UI configuration reference](https://swagger.io/docs/open-source-tools/swagger-ui/usage/configuration/).
 
 | Endpoint | Description |
 | --- | --- |

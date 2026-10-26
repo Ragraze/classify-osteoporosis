@@ -1,4 +1,8 @@
 .venv/
+.agents/
+.codex/
+.aws/
+node_modules/
 __pycache__/
 *.py[cod]
 .pytest_cache/

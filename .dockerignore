@@ -3,6 +3,7 @@
 .aws
 .codex
 .venv
+node_modules
 .models
 .env
 .env.*
