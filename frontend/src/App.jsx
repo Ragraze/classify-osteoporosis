@@ -3,6 +3,7 @@ import { errorMessage, number, requestJSON } from "./api.js";
 import { DetailDialog } from "./components/DetailDialog.jsx";
 import { Loading, Message } from "./components/Feedback.jsx";
 import { NavigationIcon } from "./components/NavigationIcon.jsx";
+import { GitHubLink } from "./components/GitHubLink.jsx";
 import Analysis from "./pages/Analysis.jsx";
 import Dataset from "./pages/Dataset.jsx";
 import Evaluation from "./pages/Evaluation.jsx";
@@ -277,6 +278,9 @@ export default function App() {
             </>
           )}
         </main>
+        <footer className="repository-footer">
+          <GitHubLink />
+        </footer>
       </div>
       <div className="sr-only" role="status">
         {announcement}

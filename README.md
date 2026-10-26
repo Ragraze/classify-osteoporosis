@@ -1,30 +1,32 @@
 # Classify Osteoporosis
 
-Dashboard untuk eksperimen klasifikasi citra X-ray lutut dengan YOLOv8, backend Flask, dan frontend React. Proyek awal merupakan tugas akhir pengolahan citra digital di Fakultas Ilmu Komputer, Universitas Brawijaya.
+A dashboard for knee X-ray image classification experiments with YOLOv8, a Flask API, and a React frontend. The original project was a final assignment for a digital image processing course at the Faculty of Computer Science, Universitas Brawijaya.
 
-## Struktur proyek
+The dashboard lets you compare training metrics across five model variants, browse the source dataset, classify an image, and review or export prediction history. The floating GitHub button in the bottom-right corner opens this repository in a new tab.
+
+## Project structure
 
 ```text
-backend/              API Flask, katalog dataset/model, inferensi, dan penyimpanan
+backend/              Flask API, dataset/model catalogs, inference, and storage
 frontend/
-  src/pages/          Analisis, Evaluasi, Dataset, dan Riwayat
-  src/components/     Komponen bersama, grafik, dan dialog
-  e2e/                Pengujian browser
-dataset/              Citra sumber menurut kelas
+  src/pages/          Analysis, Evaluation, Dataset, and History pages
+  src/components/     Shared controls, charts, and dialogs
+  e2e/                Browser tests
+dataset/              Source images organized by class
 research/
   classify-osteoporosis.ipynb
-  train-*/            Metrik, grafik, dan pointer bobot hasil pelatihan
-  val-*/              Artefak validasi penelitian asli
-scripts/              Server development, unduhan model, dan server pengujian
-tests/                Pengujian API
-docs/                 Catatan desain dan verifikasi
+  train-*/            Training metrics, plots, and Git LFS weight pointers
+  val-*/              Original research validation artifacts
+scripts/              Development server, model downloads, and test server
+tests/                API tests
+docs/                 Design notes and verification records
 ```
 
-`.venv/`, `.models/`, `instance/`, `frontend/node_modules/`, `frontend/dist/`, dan `artifacts/` berisi dependensi, bobot lokal, riwayat, atau hasil proses yang diabaikan Git. Notebook dan artefak penelitian asli disimpan di `research/`; path lingkungan pelatihan di dalam notebook tetap merupakan rekaman eksperimen asli.
+Git ignores local dependencies and generated data in `.venv/`, `.models/`, `instance/`, `frontend/node_modules/`, `frontend/dist/`, and `artifacts/`. The original notebook and research outputs live in `research/`. Paths inside the notebook still refer to the original training environment.
 
-## Menjalankan secara lokal
+## Local development
 
-Prasyarat: Python 3.10+, Node.js 22.12+ atau versi LTS yang lebih baru, dan npm.
+Requirements: Python 3.10+, Node.js 22.12+ or a newer LTS release, and npm.
 
 ```bash
 python3 -m venv .venv
@@ -39,18 +41,18 @@ cd ..
 python scripts/dev.py
 ```
 
-Buka <http://127.0.0.1:5173>. API Flask berjalan di <http://127.0.0.1:5000>; Vite meneruskan permintaan `/api` ke Flask sehingga tidak membutuhkan konfigurasi CORS.
+Open <http://127.0.0.1:5173>. The Flask API runs at <http://127.0.0.1:5000>. Vite proxies `/api` requests to Flask, so a separate CORS configuration is unnecessary.
 
-Pada Debian/Ubuntu, jika pembuatan virtual environment gagal karena `ensurepip` tidak tersedia, instal paket `python3-venv` terlebih dahulu. Alternatif jika pip sudah tersedia:
+On Debian or Ubuntu, install `python3-venv` if virtual environment creation fails because `ensurepip` is unavailable. If pip is already installed, you can also use:
 
 ```bash
 python3 -m venv --without-pip .venv
 python3 -m pip --python .venv/bin/python install pip
 ```
 
-Untuk memasang hanya model default yang lebih kecil, gunakan `python scripts/download_models.py --model nano`. Skrip mengambil objek Git LFS dari repo ini, memverifikasi ukuran dan SHA-256, lalu menyimpan bobot di `.models/`. Pointer Git LFS yang dilacak Git tetap utuh. Bobot yang sudah tersedia melalui `git lfs pull` juga didukung.
+To download only the smaller default model, run `python scripts/download_models.py --model nano`. The script retrieves Git LFS objects from this repository, verifies their size and SHA-256 checksum, and saves the weights in `.models/`. It preserves the tracked LFS pointers. Weights downloaded with `git lfs pull` are also supported.
 
-## Build dan satu server
+## Production build and single-server setup
 
 ```bash
 cd frontend
@@ -60,48 +62,49 @@ source .venv/bin/activate
 gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 --timeout 120 'backend:create_app()'
 ```
 
-Flask menyajikan build React dan API melalui <http://127.0.0.1:5000>. Inferensi berjalan di CPU, memuat model saat pertama digunakan, dan memakai satu model dalam memori. Pemuatan pertama lebih lama daripada prediksi berikutnya. Satu worker mencegah duplikasi bobot besar dalam memori.
+Flask serves both the React build and the API at <http://127.0.0.1:5000>. Inference runs on the CPU. The backend loads a model on first use and keeps one model in memory at a time, so the first prediction takes longer. A single worker avoids duplicating large model weights in memory.
 
-## Data dan model
+## Data and models
 
-- Lima varian YOLOv8: Nano, Small, Medium, Large, dan Xlarge.
-- Metrik dan kurva berasal dari `research/train-*/results.csv`. Label sumber pada grafik tetap memakai nama run asli `train-*/results.csv`, relatif terhadap `research/`. Nilai terbaik merupakan maksimum akurasi top-1 pada validasi selama pelatihan, bukan hasil uji klinis atau akurasi pada unggahan baru.
-- Epoch pada tampilan mengikuti penomoran CSV asli, mulai dari satu. Jumlah epoch adalah jumlah baris CSV.
-- Artefak confusion matrix berasal dari folder pelatihan asli, bukan dihitung dari unggahan pengguna.
-- Kelas model: `normal` dan `osteoporosis`. Probabilitas adalah skor keluaran model, bukan estimasi risiko klinis yang terkalibrasi.
-- Citra PNG/JPEG maksimal 10 MB, minimal 32 × 32 piksel, dan maksimal 25 megapiksel. Citra dikonversi ke RGB dan disimpan ulang sebagai PNG tanpa metadata EXIF.
-- Riwayat SQLite dan citra tersimpan di `instance/`, yang diabaikan Git. Atur `OSTEO_INSTANCE_PATH` untuk memindahkan direktori data. Statistik awal kosong sampai ada analisis yang berhasil.
+- Five YOLOv8 variants: Nano, Small, Medium, Large, and Xlarge.
+- Training metrics and curves come from `research/train-*/results.csv`. Chart source labels retain the original run names, `train-*/results.csv`, relative to `research/`. The best accuracy is the maximum validation top-1 accuracy recorded during training. It does not measure clinical performance or accuracy on new uploads.
+- Displayed epochs follow the original CSV numbering, starting at one. The epoch count is the number of CSV rows.
+- Confusion matrices are original training artifacts; the app does not recalculate them from user uploads.
+- Model classes are `normal` and `osteoporosis`. Probabilities are model output scores, not calibrated estimates of clinical risk.
+- Uploads must be PNG or JPEG, no larger than 10 MB, at least 32 × 32 pixels, and no more than 25 megapixels. The backend converts images to RGB and saves them as PNG without EXIF metadata.
+- SQLite history and uploaded images live in the Git-ignored `instance/` directory. Set `OSTEO_INSTANCE_PATH` to use another location. History statistics remain empty until a prediction succeeds.
+- The dataset gallery counts unreadable source files separately and displays only readable images.
 
-Aplikasi ditujukan untuk eksperimen lokal. Hasil klasifikasi bukan diagnosis klinis. Aplikasi belum memiliki autentikasi atau isolasi data antar pengguna; jangan mempublikasikan server yang menyimpan citra sensitif tanpa menambahkan kontrol akses.
+This application is intended for local experiments. Classification results are not clinical diagnoses. The app has no authentication or data isolation between users. Add access controls before exposing a server that stores sensitive images.
 
 ## API
 
-| Endpoint | Fungsi |
+| Endpoint | Description |
 | --- | --- |
-| `GET /api/health` | Status API dan ketersediaan paket runtime |
-| `GET /api/dashboard` | Statistik riwayat dan katalog model |
-| `GET /api/models` | Metrik, seri epoch, dan status bobot setiap model |
-| `GET /api/dataset` | Daftar citra dataset menurut `label`, `page`, dan `per_page`; file yang tidak terbaca dihitung terpisah |
-| `GET /api/dataset/<label>/<file>` | Citra asli; gunakan `thumbnail=1` untuk pratinjau JPEG maksimal 400 × 400 piksel |
-| `POST /api/predictions` | Multipart `image` dan `model`, menjalankan prediksi lalu menyimpan hasil |
-| `GET /api/predictions` | Riwayat dengan `search`, `label`, `model`, `page`, `per_page` |
-| `GET /api/predictions/<id>` | Detail prediksi |
-| `DELETE /api/predictions/<id>` | Hapus satu riwayat analisis beserta citra tersimpannya |
-| `GET /api/predictions/<id>/image` | Citra prediksi yang sudah dinormalisasi |
-| `GET /api/predictions/export` | Ekspor CSV dengan filter yang sama dengan riwayat |
-| `GET /api/models/<model>/artifacts/<file>` | Artefak `confusion_matrix.png` atau `results.png` |
+| `GET /api/health` | API health and inference runtime package availability |
+| `GET /api/dashboard` | Prediction history statistics and model catalog |
+| `GET /api/models` | Metrics, epoch series, and weight availability for each model |
+| `GET /api/dataset` | Dataset images filtered by `label`, `page`, and `per_page`; unreadable files counted separately |
+| `GET /api/dataset/<label>/<file>` | Original image; add `thumbnail=1` for a JPEG preview up to 400 × 400 pixels |
+| `POST /api/predictions` | Multipart `image` and `model`; run inference and save the result |
+| `GET /api/predictions` | History with `search`, `label`, `model`, `page`, and `per_page` filters |
+| `GET /api/predictions/<id>` | Prediction details |
+| `DELETE /api/predictions/<id>` | Delete one prediction and its stored image |
+| `GET /api/predictions/<id>/image` | Normalized image for a prediction |
+| `GET /api/predictions/export` | CSV export using the same filters as history |
+| `GET /api/models/<model>/artifacts/<file>` | Model artifacts: `confusion_matrix.png` or `results.png` |
 
-Contoh prediksi:
+Example prediction:
 
 ```bash
 curl -F 'image=@/path/to/xray.png' -F 'model=nano' http://127.0.0.1:5000/api/predictions
 ```
 
-Kesalahan API menggunakan JSON `{ "error": "..." }`. Bobot/runtime yang tidak tersedia menghasilkan HTTP 503; aplikasi tidak membuat hasil prediksi simulasi.
+API errors use the JSON format `{ "error": "..." }`. Missing weights or an unavailable inference runtime return HTTP 503. The app does not generate simulated predictions.
 
-Pada halaman Riwayat, tombol **Hapus** di setiap hasil membuka konfirmasi. Penghapusan permanen mencakup hasil analisis dan citra tersimpan; jumlah riwayat serta statistik ringkasan ikut diperbarui.
+On the History page, **Hapus** (Delete) opens a confirmation dialog. Confirming permanently removes the prediction and its stored image, then updates history counts and summary statistics. The dashboard interface remains in Indonesian.
 
-## Pengujian
+## Testing
 
 ```bash
 source .venv/bin/activate
@@ -112,10 +115,18 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Pengujian API memakai predictor deterministik untuk menguji penyimpanan dan kontrak respons, bukan menilai akurasi model.
+API tests use a deterministic predictor to verify storage and response contracts. They do not evaluate model accuracy.
 
-Pengujian browser menjalankan build produksi melalui Flask pada port 5001 dengan database sementara, lalu menghapus riwayat pengujian ketika server berhenti. Pengujian unggah dan hapus riwayat menjalankan inferensi asli dengan montage validasi yang sudah ada di repo untuk memeriksa alur teknis; ini bukan evaluasi medis atau pengukuran akurasi. Model Nano dan runtime inferensi harus tersedia. Pengujian juga mencakup Axe untuk tema putih pada preferensi sistem terang/gelap, layout 320–1440 px, dan pembesaran teks 200%. Pada Linux, Chromium mungkin memerlukan `npx playwright install-deps chromium` dengan akses administrator.
+Browser tests serve the production build through Flask on port 5001 with a temporary database. Test history is removed when the server stops. Upload and deletion tests run real Nano inference on an existing validation montage to verify the application flow; they are not medical evaluations or accuracy measurements. Nano weights and the inference runtime must be available.
 
-Catatan desain dan pengukuran kontras tersedia di [docs/design-notes.md](docs/design-notes.md).
+Browser checks also cover Axe accessibility scans with light and dark system preferences, layouts from 320 to 1440 pixels, and text enlarged to 200%. On Linux, Chromium may require `npx playwright install-deps chromium` with administrator access.
 
-Referensi implementasi: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), dan [Vite](https://vite.dev/guide/).
+Design decisions and contrast measurements are recorded in [design notes](docs/design-notes.md). The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons); its license is included in [third-party notices](docs/third-party-notices.md).
+
+Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), and [Vite](https://vite.dev/guide/).
+
+## License
+
+The application source code and project documentation are available under the [MIT License](LICENSE).
+
+Dataset images, model weights, and original research artifacts are outside the scope of this license. Refer to their original sources for reuse terms. Third-party assets retain their own licenses; see [third-party notices](docs/third-party-notices.md) for the GitHub icon attribution.

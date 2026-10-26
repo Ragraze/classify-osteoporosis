@@ -1,7 +1,7 @@
-# Artefak penelitian
+# Research artifacts
 
-Notebook `classify-osteoporosis.ipynb` dan folder `train-*` serta `val-*` merupakan keluaran penelitian asli. Isinya dipertahankan saat dipindahkan dari root repositori.
+The `classify-osteoporosis.ipynb` notebook and the `train-*` and `val-*` directories contain the original research outputs. Their contents were preserved when moved from the repository root.
 
-Backend membaca metrik dan gambar evaluasi dari `train-*/`. Pointer Git LFS berada di `train-*/weights/`; skrip `scripts/download_models.py` menyimpan bobot unduhan di `.models/` pada root repositori. Folder `val-*` menyimpan hasil validasi terpisah dan tidak digunakan sebagai pengganti metrik pelatihan pada dashboard.
+The backend reads metrics and evaluation images from `train-*/`. Git LFS pointers are stored in `train-*/weights/`; `scripts/download_models.py` saves downloaded weights in `.models/` at the repository root. The `val-*` directories hold separate validation results and do not replace the training metrics shown in the dashboard.
 
-Notebook masih memuat path lingkungan eksperimen semula. Sesuaikan path dan dependensinya jika ingin menjalankan ulang eksperimen; aplikasi lokal menggunakan perintah pada README utama.
+The notebook still contains paths from the original experiment environment. Adjust those paths and dependencies before rerunning the experiment. To run the local application, follow the commands in the [main README](../README.md).

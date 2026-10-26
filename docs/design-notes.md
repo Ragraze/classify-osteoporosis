@@ -88,3 +88,9 @@ Halaman analisis menggunakan dua panel pada ruang yang cukup: citra di kiri, pro
 - `cross-platform.md`: CSS tokens, zoom, ARIA, dan komponen web sebagai padanan prinsip native.
 
 Keputusan craft: citra monokrom dan probabilitas dua kelas menjadi identitas produk. Aksesori dekoratif dihilangkan agar tidak bersaing dengan citra atau mengesankan kepastian klinis.
+
+## Tautan GitHub mengambang
+
+Permintaan pengguna: tombol berlogo GitHub di kanan bawah seperti posisi tombol scroll-to-top. Tautan membuka repositori proyek di tab baru. Bentuk lingkaran 48 px membedakan aksesori ini dari tombol analisis; warna teks gelap dan logo putih mengikuti token yang ada. Bayangan kecil menunjukkan posisi di atas konten, tanpa animasi dekoratif. ENERGY 2 / RHYTHM 2 / MOTION 1 tetap berlaku.
+
+Ikon memakai mark GitHub dari Octicons, dengan lisensi pada `third-party-notices.md`. Nama aksesibel menyebut tujuan dan tab baru. Posisi menghormati safe-area layar, ruang footer menyediakan tempat agar kontrol terakhir dapat digulir keluar dari bawah tombol, dan tautan ikut menjadi inert saat menu mobile terbuka karena berada di dalam workspace.
