@@ -21,7 +21,6 @@ research/
   val-*/              Original research validation artifacts
 scripts/              Development server, model downloads, and test server
 tests/                API tests
-docs/                 Design notes and verification records
 ```
 
 Git ignores local dependencies and generated data in `.venv/`, `.models/`, `instance/`, `frontend/node_modules/`, `frontend/dist/`, and `artifacts/`. The original notebook and research outputs live in `research/`. Paths inside the notebook still refer to the original training environment.
@@ -174,7 +173,7 @@ Browser tests serve the production build through Flask on port 5001 with a tempo
 
 Browser checks also cover Axe accessibility scans with light and dark system preferences, layouts from 320 to 1440 pixels, and text enlarged to 200%. On Linux, Chromium may require `npx playwright install-deps chromium` with administrator access.
 
-Design decisions and contrast measurements are recorded in [design notes](docs/design-notes.md). The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons); its license is included in [third-party notices](docs/third-party-notices.md).
+The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons); its license is included in [third-party notices](THIRD_PARTY_NOTICES).
 
 Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), [Vite](https://vite.dev/guide/), and [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/).
 
@@ -182,4 +181,4 @@ Implementation references: [Flask file uploads](https://flask.palletsprojects.co
 
 The application source code and project documentation are available under the [MIT License](LICENSE).
 
-Dataset images, model weights, and original research artifacts are outside the scope of this license. Refer to their original sources for reuse terms. Third-party assets retain their own licenses; see [third-party notices](docs/third-party-notices.md) for the GitHub icon attribution.
+Dataset images, model weights, and original research artifacts are outside the scope of this license. Refer to their original sources for reuse terms. Third-party assets retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES) for the GitHub icon attribution.

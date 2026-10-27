@@ -42,7 +42,7 @@ COPY backend/ ./backend/
 COPY dataset/ ./dataset/
 COPY --from=model-download /build/research/ ./research/
 COPY LICENSE ./LICENSE
-COPY docs/third-party-notices.md ./docs/third-party-notices.md
+COPY THIRD_PARTY_NOTICES ./THIRD_PARTY_NOTICES
 COPY --from=model-download /build/.models/ ./.models/
 COPY --from=frontend-build /build/frontend/dist/ ./frontend/dist/
 
