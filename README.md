@@ -173,7 +173,7 @@ Browser tests serve the production build through Flask on port 5001 with a tempo
 
 Browser checks also cover Axe accessibility scans with light and dark system preferences, layouts from 320 to 1440 pixels, and text enlarged to 200%. On Linux, Chromium may require `npx playwright install-deps chromium` with administrator access.
 
-The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons); its license is included in [third-party notices](THIRD_PARTY_NOTICES).
+The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons).
 
 Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), [Vite](https://vite.dev/guide/), and [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/).
 
@@ -181,4 +181,4 @@ Implementation references: [Flask file uploads](https://flask.palletsprojects.co
 
 The application source code and project documentation are available under the [MIT License](LICENSE).
 
-Dataset images, model weights, and original research artifacts are outside the scope of this license. Refer to their original sources for reuse terms. Third-party assets retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES) for the GitHub icon attribution.
+Dataset images, model weights, and original research artifacts are outside the scope of this license. Refer to their original sources for reuse terms. Third-party assets retain their own licenses.
