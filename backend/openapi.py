@@ -94,14 +94,14 @@ def specification():
             "get": operation("Riwayat prediksi", "Prediksi", ref("PredictionPage"), parameters=[*filters, page,
                 parameter("per_page", {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}),
             ], errors=(400,)),
-            "post": operation("Klasifikasi citra dan simpan hasil", "Prediksi", ref("Prediction"), status="201", errors=(400, 413, 503),
+            "post": operation("Klasifikasi citra dan simpan hasil", "Prediksi", ref("Prediction"), status="201", errors=(400, 403, 413, 503),
                 description="Unggah PNG/JPEG maksimal 10 MB, minimal 32 × 32 piksel, maksimal 25 megapiksel. "
                             "Citra disimpan sebagai PNG RGB tanpa EXIF. Inferensi CPU; pemakaian model pertama lebih lambat."),
         },
         "/api/predictions/export": {"get": operation("Ekspor riwayat sebagai CSV", "Prediksi", string, parameters=filters, errors=(400,), media="text/csv")},
         "/api/predictions/{prediction_id}": {
             "get": operation("Detail prediksi", "Prediksi", ref("Prediction"), parameters=[prediction_id], errors=(404,)),
-            "delete": operation("Hapus permanen prediksi beserta citranya", "Prediksi", obj({"message": string}), parameters=[prediction_id], errors=(404,),
+            "delete": operation("Hapus permanen prediksi beserta citranya", "Prediksi", obj({"message": string}), parameters=[prediction_id], errors=(403, 404),
                 description="Menghapus riwayat dan file gambar tersimpan. Aksi ini tidak dapat dibatalkan."),
         },
         "/api/predictions/{prediction_id}/image": {"get": operation("Unduh citra prediksi tersimpan", "Prediksi", binary, parameters=[prediction_id], errors=(404,), media="image/png")},
@@ -120,7 +120,7 @@ def specification():
         }}},
     }
     error_descriptions = {
-        400: "Parameter atau citra tidak valid.", 404: "Data atau file tidak ditemukan.",
+        400: "Parameter atau citra tidak valid.", 403: "Token CSRF tidak valid atau tidak tersedia.", 404: "Data atau file tidak ditemukan.",
         413: "Ukuran unggahan melebihi batas 10 MB.", 422: "File citra dataset rusak.",
         500: "Kesalahan internal; periksa log backend.", 503: "Bobot atau runtime inferensi tidak tersedia, atau inferensi gagal.",
     }
@@ -128,7 +128,8 @@ def specification():
         "openapi": "3.0.3",
         "info": {"title": "Classify Osteoporosis API", "version": "1.0.0",
                  "description": "API eksperimen klasifikasi X-ray lutut. Hasil model bukan diagnosis klinis. "
-                                "API tidak memakai autentikasi. Try it out mengirim permintaan ke server ini; "
+                                "API tidak memakai autentikasi. POST dan DELETE memerlukan cookie csrftoken dan header X-CSRFToken yang cocok; "
+                                "ambil cookie melalui GET /api/health. Swagger mengirim token secara otomatis. Try it out mengirim permintaan ke server ini; "
                                 "unggahan menyimpan hasil dan DELETE menghapus data secara permanen."},
         "servers": [{"url": "/"}],
         "tags": [{"name": name} for name in ("Status", "Model", "Dataset", "Prediksi")],

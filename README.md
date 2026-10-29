@@ -1,15 +1,30 @@
 # Classify Osteoporosis
 
-A dashboard for knee X-ray image classification experiments with YOLOv8, a Flask API, and a React frontend. The original project was a final assignment for a digital image processing course at the Faculty of Computer Science, Universitas Brawijaya.
+A dashboard for knee X-ray image classification experiments with YOLOv8, a Django API, and a React frontend. The original project was a final assignment for a digital image processing course at the Faculty of Computer Science, Universitas Brawijaya.
 
 The dashboard lets you compare training metrics across five model variants, browse the source dataset, classify an image, and review or export prediction history. The floating GitHub button in the bottom-right corner opens this repository in a new tab.
+
+## Branches and technology stacks
+
+| Branch | Backend | Frontend | Purpose |
+| --- | --- | --- | --- |
+| [`main`](https://github.com/Ragraze/classify-osteoporosis/tree/main) | Django 5.2 | React 19 + Vite | Current application |
+| [`master`](https://github.com/Ragraze/classify-osteoporosis/tree/master) | Flask 3.1 | React 19 + Vite | Preserved Flask version |
+
+Both versions use YOLOv8 for CPU inference and SQLite for prediction history.
+Local dependencies and frontend builds are shared by the branches: run
+`npm run setup` again after switching branches to install the matching backend
+requirements. Stop the development servers before switching branches.
+
+This README describes the **Django + React version on `main`**.
 
 ## Project structure
 
 ```text
 Dockerfile            React build, model download, and CPU inference container
 .dockerignore         Files excluded from the Docker build context
-backend/              Flask API, dataset/model catalogs, inference, and storage
+backend/              Django settings, URLs, API views, inference, and SQLite storage
+manage.py             Django management commands
 frontend/
   src/pages/          Analysis, Evaluation, Dataset, and History pages
   src/components/     Shared controls, charts, and dialogs
@@ -55,7 +70,7 @@ cd ..
 python scripts/dev.py
 ```
 
-Open <http://127.0.0.1:5173>. The Flask API runs at <http://127.0.0.1:5000>. Vite proxies `/api` requests to Flask, so a separate CORS configuration is unnecessary.
+Open <http://127.0.0.1:5173>. The Django API runs at <http://127.0.0.1:5000>. Vite proxies `/api` requests to Django, so a separate CORS configuration is unnecessary.
 
 On Debian or Ubuntu, install `python3-venv` if virtual environment creation fails because `ensurepip` is unavailable. If pip is already installed, you can also use:
 
@@ -63,6 +78,9 @@ On Debian or Ubuntu, install `python3-venv` if virtual environment creation fail
 python3 -m venv --without-pip .venv
 python3 -m pip --python .venv/bin/python install pip
 ```
+
+To start only the API, run `python manage.py runserver 127.0.0.1:5000` from the
+repository root with the virtual environment active.
 
 To download only the smaller default model, run `python scripts/download_models.py --model nano`. The script retrieves Git LFS objects from this repository, verifies their size and SHA-256 checksum, and saves the weights in `.models/`. It preserves the tracked LFS pointers. Weights downloaded with `git lfs pull` are also supported.
 
@@ -73,10 +91,19 @@ cd frontend
 npm run build
 cd ..
 source .venv/bin/activate
-gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 --timeout 120 'backend:create_app()'
+gunicorn --bind 127.0.0.1:5000 --workers 1 --threads 4 --timeout 120 backend.wsgi:application
 ```
 
-Flask serves both the React build and the API at <http://127.0.0.1:5000>. Inference runs on the CPU. The backend loads a model on first use and keeps one model in memory at a time, so the first prediction takes longer. A single worker avoids duplicating large model weights in memory.
+Django serves both the React build and the API at <http://127.0.0.1:5000>. Inference runs on the CPU. The backend loads a model on first use and keeps one model in memory at a time, so the first prediction takes longer. A single worker avoids duplicating large model weights in memory.
+
+Django defaults to `DEBUG=False` and allows `localhost`, `127.0.0.1`, and `[::1]`.
+For another hostname, set `DJANGO_ALLOWED_HOSTS` to a comma-separated list.
+Set `DJANGO_SECRET_KEY` to a stable random secret for deployment; the default is
+an ephemeral key. For a trusted frontend on another origin, configure
+`DJANGO_CSRF_TRUSTED_ORIGINS` with comma-separated full origins. Local Vite
+requests use the existing same-origin proxy. React and Swagger send CSRF tokens
+for uploads and deletion. Non-browser API clients must also send a CSRF cookie
+and matching `X-CSRFToken` header for these requests.
 
 ## Docker
 
@@ -90,7 +117,7 @@ docker run --rm --name classify-osteoporosis \
   classify-osteoporosis
 ```
 
-Open <http://127.0.0.1:5000>. The image includes the React production build, Flask API, source dataset, training metrics, and all five model weights. The build downloads and verifies weights from Git LFS; local Python/Node dependencies and local weights are not required. The first build needs internet access and downloads the CPU inference runtime as well as the model weights.
+Open <http://127.0.0.1:5000>. The image includes the React production build, Django API, source dataset, training metrics, and all five model weights. The build downloads and verifies weights from Git LFS; local Python/Node dependencies and local weights are not required. The first build needs internet access and downloads the CPU inference runtime as well as the model weights.
 
 For a smaller image with only Nano weights, use:
 
@@ -116,7 +143,7 @@ docker stop classify-osteoporosis
 - Confusion matrices are original training artifacts; the app does not recalculate them from user uploads.
 - Model classes are `normal` and `osteoporosis`. Probabilities are model output scores, not calibrated estimates of clinical risk.
 - Uploads must be PNG or JPEG, no larger than 10 MB, at least 32 × 32 pixels, and no more than 25 megapixels. The backend converts images to RGB and saves them as PNG without EXIF metadata.
-- SQLite history and uploaded images live in the Git-ignored `instance/` directory. Set `OSTEO_INSTANCE_PATH` to use another location. History statistics remain empty until a prediction succeeds.
+- SQLite history uses the existing storage layer and schema (not the Django ORM), so existing history requires no database conversion. Uploaded images and SQLite history live in the Git-ignored `instance/` directory. Set `OSTEO_INSTANCE_PATH` to use another location. History statistics remain empty until a prediction succeeds.
 - The dataset gallery counts unreadable source files separately and displays only readable images.
 
 This application is intended for local experiments. Classification results are not clinical diagnoses. The app has no authentication or data isolation between users. Add access controls before exposing a server that stores sensitive images.
@@ -146,10 +173,12 @@ The UI configuration follows the [Swagger UI configuration reference](https://sw
 | `GET /api/predictions/export` | CSV export using the same filters as history |
 | `GET /api/models/<model>/artifacts/<file>` | Model artifacts: `confusion_matrix.png` or `results.png` |
 
-Example prediction:
+Example prediction (fetch a CSRF cookie first, then send its token):
 
 ```bash
-curl -F 'image=@/path/to/xray.png' -F 'model=nano' http://127.0.0.1:5000/api/predictions
+curl -c /tmp/osteo-cookies.txt http://127.0.0.1:5000/api/health
+CSRF_TOKEN=$(awk '$6 == "csrftoken" {print $7}' /tmp/osteo-cookies.txt)
+curl -b /tmp/osteo-cookies.txt -H "X-CSRFToken: $CSRF_TOKEN" -F 'image=@/path/to/xray.png' -F 'model=nano' http://127.0.0.1:5000/api/predictions
 ```
 
 API errors use the JSON format `{ "error": "..." }`. Missing weights or an unavailable inference runtime return HTTP 503. The app does not generate simulated predictions.
@@ -169,13 +198,13 @@ npm run test:e2e
 
 API tests use a deterministic predictor to verify storage and response contracts. They do not evaluate model accuracy.
 
-Browser tests serve the production build through Flask on port 5001 with a temporary database. Test history is removed when the server stops. Upload and deletion tests run real Nano inference on an existing validation montage to verify the application flow; they are not medical evaluations or accuracy measurements. Nano weights and the inference runtime must be available.
+Browser tests serve the production build through Django on port 5001 with a temporary database. Test history is removed when the server stops. Upload and deletion tests run real Nano inference on an existing validation montage to verify the application flow; they are not medical evaluations or accuracy measurements. Nano weights and the inference runtime must be available.
 
 Browser checks also cover Axe accessibility scans with light and dark system preferences, layouts from 320 to 1440 pixels, and text enlarged to 200%. On Linux, Chromium may require `npx playwright install-deps chromium` with administrator access.
 
 The GitHub mark comes from [GitHub Octicons](https://github.com/primer/octicons).
 
-Implementation references: [Flask file uploads](https://flask.palletsprojects.com/en/stable/patterns/fileuploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), [Vite](https://vite.dev/guide/), and [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/).
+Implementation references: [Django file uploads](https://docs.djangoproject.com/en/5.2/topics/http/file-uploads/), [Ultralytics classification](https://docs.ultralytics.com/tasks/classify/), [Vite](https://vite.dev/guide/), and [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/).
 
 ## License
 

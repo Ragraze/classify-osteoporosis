@@ -1,12 +1,12 @@
 """Serve the production build with isolated, disposable history for browser tests."""
 
-from pathlib import Path
 import signal
 import tempfile
 
-from werkzeug.serving import make_server
+import os
+from wsgiref.simple_server import make_server
 
-from backend import create_app
+from django.core.wsgi import get_wsgi_application
 
 
 def main():
@@ -15,8 +15,10 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     with tempfile.TemporaryDirectory(prefix="osteo-browser-tests-") as directory:
-        app = create_app({"DATA_DIR": Path(directory)})
-        server = make_server("127.0.0.1", 5001, app, threaded=True)
+        os.environ["OSTEO_INSTANCE_PATH"] = directory
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
+        app = get_wsgi_application()
+        server = make_server("127.0.0.1", 5001, app)
         try:
             server.serve_forever()
         except KeyboardInterrupt:

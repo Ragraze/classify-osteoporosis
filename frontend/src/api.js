@@ -1,7 +1,14 @@
 export async function requestJSON(path, options = {}) {
+  const headers = new Headers(options.headers);
+  if (!['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase())) {
+    await requestJSON('/api/health');
+    const cookie = document.cookie.split('; ').find(value => value.startsWith('csrftoken='));
+    if (cookie) headers.set('X-CSRFToken', decodeURIComponent(cookie.split('=')[1]));
+  }
   const response = await fetch(path, {
     signal: AbortSignal.timeout(120000),
     ...options,
+    headers,
   });
   const data = await response.json().catch(() => null);
   if (!response.ok)

@@ -310,7 +310,11 @@ test("hapus riwayat mendukung batal, Escape, kegagalan, dan konfirmasi", async (
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const before = await (await page.request.get("/api/dashboard")).json();
+  await page.request.get('/api/health');
+  const cookies = await page.context().cookies();
+  const token = cookies.find(cookie => cookie.name === 'csrftoken').value;
   const response = await page.request.post("/api/predictions", {
+    headers: { 'X-CSRFToken': token },
     multipart: {
       model: "nano",
       image: {

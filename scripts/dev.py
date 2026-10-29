@@ -1,4 +1,4 @@
-"""Start the local Flask API and Vite frontend together."""
+"""Start the local Django API and Vite frontend together."""
 
 import os
 from pathlib import Path
@@ -37,15 +37,9 @@ def main():
             subprocess.Popen(
                 [
                     str(python),
-                    "-m",
-                    "flask",
-                    "--app",
-                    "backend",
-                    "run",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    "5000",
+                    "manage.py",
+                    "runserver",
+                    "127.0.0.1:5000",
                 ],
                 cwd=ROOT,
                 env=env,
