@@ -4,6 +4,20 @@ A dashboard for knee X-ray image classification experiments with YOLOv8, a Flask
 
 The dashboard lets you compare training metrics across five model variants, browse the source dataset, classify an image, and review or export prediction history. The floating GitHub button in the bottom-right corner opens this repository in a new tab.
 
+## Branches and technology stacks
+
+| Branch | Backend | Frontend | Purpose |
+| --- | --- | --- | --- |
+| [`main`](https://github.com/Ragraze/classify-osteoporosis/tree/main) | Django 5.2 | React 19 + Vite | Current application |
+| [`master`](https://github.com/Ragraze/classify-osteoporosis/tree/master) | Flask 3.1 | React 19 + Vite | Preserved Flask version |
+
+Both versions use YOLOv8 for CPU inference and SQLite for prediction history.
+Local dependencies and frontend builds are shared by the branches: run
+`npm run setup` again after switching branches to install the matching backend
+requirements. Stop the development servers before switching branches.
+
+This README describes the **Flask + React version on `master`**.
+
 ## Project structure
 
 ```text
