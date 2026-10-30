@@ -39,7 +39,6 @@ def specification():
     score = {"type": "number", "minimum": 0, "maximum": 1}
     label = {"type": "string", "enum": ["normal", "osteoporosis"]}
     model = {"type": "string", "enum": list(VARIANTS)}
-    nullable_number = {"type": "number", "nullable": True}
     nullable_integer = {"type": "integer", "nullable": True}
     schemas = {
         "Error": obj({"error": string}),
@@ -61,26 +60,12 @@ def specification():
         }),
         "DatasetImage": obj({"filename": string, "width": integer, "height": integer,
                              "format": {"type": "string", "enum": ["PNG", "JPEG"]}, "image_url": string}),
-        "PredictionPage": obj({"items": array(ref("Prediction")), "total": integer, "page": integer, "per_page": integer}),
         "DatasetPage": obj({"items": array(ref("DatasetImage")), "label": label, "total": integer,
                             "unreadable": integer, "page": integer, "per_page": integer}),
-        "Dashboard": obj({
-            "total": integer, "normal": integer, "osteoporosis": integer,
-            "avg_confidence": nullable_number, "avg_inference_ms": nullable_number,
-            "activity": array(obj({"date": {"type": "string", "format": "date"}, "count": integer})),
-            "recent": array(ref("Prediction")), "models": array(ref("Model")),
-        }),
     }
-    filters = [
-        parameter("search", string, description="Cari nama file atau ID; dibatasi 200 karakter."),
-        parameter("label", {"type": "string", "enum": ["", "normal", "osteoporosis"]}),
-        parameter("model", {"type": "string", "enum": ["", *VARIANTS]}),
-    ]
     page = parameter("page", {"type": "integer", "minimum": 1, "default": 1})
-    prediction_id = parameter("prediction_id", string, "path", "ID prediksi dari respons unggahan.")
     paths = {
         "/api/health": {"get": operation("Status API dan ketersediaan runtime", "Status", ref("Health"))},
-        "/api/dashboard": {"get": operation("Ringkasan riwayat dan katalog model", "Status", ref("Dashboard"))},
         "/api/models": {"get": operation("Model, metrik pelatihan, dan ketersediaan bobot", "Model", obj({"items": array(ref("Model"))}))},
         "/api/dataset": {"get": operation("Daftar citra dataset", "Dataset", ref("DatasetPage"), parameters=[
             parameter("label", {**label, "default": "normal"}), page,
@@ -91,20 +76,10 @@ def specification():
             parameter("thumbnail", {"type": "string", "enum": ["1"]}, description="Gunakan 1 untuk JPEG maksimal 400 × 400 piksel."),
         ], errors=(404, 422), media="image/png")},
         "/api/predictions": {
-            "get": operation("Riwayat prediksi", "Prediksi", ref("PredictionPage"), parameters=[*filters, page,
-                parameter("per_page", {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}),
-            ], errors=(400,)),
-            "post": operation("Klasifikasi citra dan simpan hasil", "Prediksi", ref("Prediction"), status="201", errors=(400, 403, 413, 503),
+            "post": operation("Klasifikasi citra tanpa penyimpanan server", "Prediksi", ref("Prediction"), status="201", errors=(400, 403, 413, 503),
                 description="Unggah PNG/JPEG maksimal 10 MB, minimal 32 × 32 piksel, maksimal 25 megapiksel. "
-                            "Citra disimpan sebagai PNG RGB tanpa EXIF. Inferensi CPU; pemakaian model pertama lebih lambat."),
+                            "Respons memuat citra PNG RGB tanpa EXIF sebagai data URL; browser menyimpan riwayat melalui localStorage. Inferensi CPU; pemakaian model pertama lebih lambat."),
         },
-        "/api/predictions/export": {"get": operation("Ekspor riwayat sebagai CSV", "Prediksi", string, parameters=filters, errors=(400,), media="text/csv")},
-        "/api/predictions/{prediction_id}": {
-            "get": operation("Detail prediksi", "Prediksi", ref("Prediction"), parameters=[prediction_id], errors=(404,)),
-            "delete": operation("Hapus permanen prediksi beserta citranya", "Prediksi", obj({"message": string}), parameters=[prediction_id], errors=(403, 404),
-                description="Menghapus riwayat dan file gambar tersimpan. Aksi ini tidak dapat dibatalkan."),
-        },
-        "/api/predictions/{prediction_id}/image": {"get": operation("Unduh citra prediksi tersimpan", "Prediksi", binary, parameters=[prediction_id], errors=(404,), media="image/png")},
         "/api/models/{variant}/artifacts/{filename}": {"get": operation("Unduh grafik hasil pelatihan", "Model", binary, parameters=[
             parameter("variant", model, "path"),
             parameter("filename", {"type": "string", "enum": ["confusion_matrix.png", "results.png"]}, "path"),
@@ -128,9 +103,9 @@ def specification():
         "openapi": "3.0.3",
         "info": {"title": "Classify Osteoporosis API", "version": "1.0.0",
                  "description": "API eksperimen klasifikasi X-ray lutut. Hasil model bukan diagnosis klinis. "
-                                "API tidak memakai autentikasi. POST dan DELETE memerlukan cookie csrftoken dan header X-CSRFToken yang cocok; "
+                                "API tidak memakai autentikasi. POST memerlukan cookie csrftoken dan header X-CSRFToken yang cocok; "
                                 "ambil cookie melalui GET /api/health. Swagger mengirim token secara otomatis. Try it out mengirim permintaan ke server ini; "
-                                "unggahan menyimpan hasil dan DELETE menghapus data secara permanen."},
+                                "unggahan hanya mengembalikan hasil, tanpa menyimpan riwayat atau citra di server."},
         "servers": [{"url": "/"}],
         "tags": [{"name": name} for name in ("Status", "Model", "Dataset", "Prediksi")],
         "paths": paths,

@@ -11,7 +11,7 @@ The dashboard lets you compare training metrics across five model variants, brow
 | [`main`](https://github.com/Ragraze/classify-osteoporosis/tree/main) | Django 5.2 | React 19 + Vite | Current application |
 | [`master`](https://github.com/Ragraze/classify-osteoporosis/tree/master) | Flask 3.1 | React 19 + Vite | Preserved Flask version |
 
-Both versions use YOLOv8 for CPU inference and SQLite for prediction history.
+Both versions use YOLOv8 for CPU inference. On `main`, prediction history and normalized images are stored in browser localStorage; the backend stores neither. The preserved `master` version still uses SQLite.
 Local dependencies and frontend builds are shared by the branches: run
 `npm run setup` again after switching branches to install the matching backend
 requirements. Stop the development servers before switching branches.
@@ -23,7 +23,7 @@ This README describes the **Django + React version on `main`**.
 ```text
 Dockerfile            React build, model download, and CPU inference container
 .dockerignore         Files excluded from the Docker build context
-backend/              Django settings, URLs, API views, inference, and SQLite storage
+backend/              Django settings, URLs, API views, and stateless inference
 manage.py             Django management commands
 frontend/
   src/pages/          Analysis, Evaluation, Dataset, and History pages
@@ -102,7 +102,7 @@ Set `DJANGO_SECRET_KEY` to a stable random secret for deployment; the default is
 an ephemeral key. For a trusted frontend on another origin, configure
 `DJANGO_CSRF_TRUSTED_ORIGINS` with comma-separated full origins. Local Vite
 requests use the existing same-origin proxy. React and Swagger send CSRF tokens
-for uploads and deletion. Non-browser API clients must also send a CSRF cookie
+for uploads. Non-browser API clients must also send a CSRF cookie
 and matching `X-CSRFToken` header for these requests.
 
 ## Docker
@@ -113,7 +113,6 @@ Build and run from the repository root:
 docker build -t classify-osteoporosis .
 docker run --rm --name classify-osteoporosis \
   -p 127.0.0.1:5000:5000 \
-  -v osteoporosis-data:/app/instance \
   classify-osteoporosis
 ```
 
@@ -127,7 +126,7 @@ docker build --build-arg MODEL_VARIANT=nano -t classify-osteoporosis:nano .
 
 Other supported values are `small`, `medium`, `large`, and `xlarge`. Metrics for all variants remain available; inference requires the selected variant's weights. The default is `all`.
 
-The container runs as an unprivileged user and serves the dashboard and API through one Gunicorn worker with four threads. Its health check calls `/api/health`. The named volume `osteoporosis-data` preserves SQLite history and uploaded images when the container is removed. Local `instance/` data is excluded from the image and is not imported automatically.
+The container runs as an unprivileged user and serves the dashboard and API through one Gunicorn worker with four threads. Its health check calls `/api/health`. No history volume or database is needed. History belongs to the browser and site origin; `instance/` is only used for inference runtime caches.
 
 Stop the container from another terminal:
 
@@ -143,10 +142,10 @@ docker stop classify-osteoporosis
 - Confusion matrices are original training artifacts; the app does not recalculate them from user uploads.
 - Model classes are `normal` and `osteoporosis`. Probabilities are model output scores, not calibrated estimates of clinical risk.
 - Uploads must be PNG or JPEG, no larger than 10 MB, at least 32 × 32 pixels, and no more than 25 megapixels. The backend converts images to RGB and saves them as PNG without EXIF metadata.
-- SQLite history uses the existing storage layer and schema (not the Django ORM), so existing history requires no database conversion. Uploaded images and SQLite history live in the Git-ignored `instance/` directory. Set `OSTEO_INSTANCE_PATH` to use another location. History statistics remain empty until a prediction succeeds.
+- History and normalized PNG images use the versioned localStorage key `classify-osteoporosis-history-v1`. Search, filters, pagination, details, deletion, counts, and CSV export run in the browser. History survives refreshes but is not shared between browsers, devices, or origins (including different ports or localhost versus 127.0.0.1). Clearing site data deletes history. Storage quota or permission failures are shown without overwriting old data. Export CSV before deleting old results; CSV contains metadata, not images. Existing SQLite history is not automatically imported. `OSTEO_INSTANCE_PATH` only controls runtime caches.
 - The dataset gallery counts unreadable source files separately and displays only readable images.
 
-This application is intended for local experiments. Classification results are not clinical diagnoses. The app has no authentication or data isolation between users. Add access controls before exposing a server that stores sensitive images.
+This application is intended for local experiments. Classification results are not clinical diagnoses. The app has no authentication. Images are sent to the API for inference but are not retained by the backend; browser history remains accessible to anyone using that browser profile.
 
 ## API
 
@@ -154,23 +153,17 @@ Interactive Swagger documentation is available at <http://127.0.0.1:5173/api/doc
 in development and <http://127.0.0.1:5000/api/docs> in Docker or the single-server
 setup. The OpenAPI 3.0 JSON document is served at `/api/openapi.json`.
 Swagger assets are bundled with the Python dependency, so opening the docs does
-not require a CDN. **Try it out** calls the same server: uploading stores a real
-prediction, and DELETE permanently removes a prediction and its image.
+not require a CDN. **Try it out** calls the same server: uploading runs real
+inference and returns a result without storing it on the server.
 The UI configuration follows the [Swagger UI configuration reference](https://swagger.io/docs/open-source-tools/swagger-ui/usage/configuration/).
 
 | Endpoint | Description |
 | --- | --- |
 | `GET /api/health` | API health and inference runtime package availability |
-| `GET /api/dashboard` | Prediction history statistics and model catalog |
 | `GET /api/models` | Metrics, epoch series, and weight availability for each model |
 | `GET /api/dataset` | Dataset images filtered by `label`, `page`, and `per_page`; unreadable files counted separately |
 | `GET /api/dataset/<label>/<file>` | Original image; add `thumbnail=1` for a JPEG preview up to 400 × 400 pixels |
-| `POST /api/predictions` | Multipart `image` and `model`; run inference and save the result |
-| `GET /api/predictions` | History with `search`, `label`, `model`, `page`, and `per_page` filters |
-| `GET /api/predictions/<id>` | Prediction details |
-| `DELETE /api/predictions/<id>` | Delete one prediction and its stored image |
-| `GET /api/predictions/<id>/image` | Normalized image for a prediction |
-| `GET /api/predictions/export` | CSV export using the same filters as history |
+| `POST /api/predictions` | Multipart `image` and `model`; run inference and return the result with a normalized PNG data URL |
 | `GET /api/models/<model>/artifacts/<file>` | Model artifacts: `confusion_matrix.png` or `results.png` |
 
 Example prediction (fetch a CSRF cookie first, then send its token):
@@ -183,7 +176,7 @@ curl -b /tmp/osteo-cookies.txt -H "X-CSRFToken: $CSRF_TOKEN" -F 'image=@/path/to
 
 API errors use the JSON format `{ "error": "..." }`. Missing weights or an unavailable inference runtime return HTTP 503. The app does not generate simulated predictions.
 
-On the History page, **Hapus** (Delete) opens a confirmation dialog. Confirming permanently removes the prediction and its stored image, then updates history counts and summary statistics. The dashboard interface remains in Indonesian.
+On the History page, **Hapus** (Delete) opens a confirmation dialog. Confirming permanently removes the prediction and its stored image, then updates browser history counts. The dashboard interface remains in Indonesian.
 
 ## Testing
 
@@ -196,9 +189,9 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-API tests use a deterministic predictor to verify storage and response contracts. They do not evaluate model accuracy.
+API tests use a deterministic predictor to verify stateless inference and response contracts. They do not evaluate model accuracy.
 
-Browser tests serve the production build through Django on port 5001 with a temporary database. Test history is removed when the server stops. Upload and deletion tests run real Nano inference on an existing validation montage to verify the application flow; they are not medical evaluations or accuracy measurements. Nano weights and the inference runtime must be available.
+Browser tests serve the production build through Django on port 5001 with a temporary runtime cache. Each browser test context has isolated localStorage. Upload and deletion tests run real Nano inference on an existing validation montage to verify the application flow; they are not medical evaluations or accuracy measurements. Nano weights and the inference runtime must be available.
 
 Browser checks also cover Axe accessibility scans with light and dark system preferences, layouts from 320 to 1440 pixels, and text enlarged to 200%. On Linux, Chromium may require `npx playwright install-deps chromium` with administrator access.
 

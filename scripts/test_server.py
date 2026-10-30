@@ -1,4 +1,4 @@
-"""Serve the production build with isolated, disposable history for browser tests."""
+"""Serve the production build with a disposable runtime cache for browser tests."""
 
 import signal
 import tempfile

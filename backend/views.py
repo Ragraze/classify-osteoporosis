@@ -1,4 +1,4 @@
-import csv
+import base64
 import io
 import logging
 import os
@@ -11,11 +11,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from django.conf import settings
-from django.http import FileResponse, JsonResponse, StreamingHttpResponse
+from django.http import FileResponse, JsonResponse
 from django.urls import reverse
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from . import dataset, storage
+from . import dataset
 from .models import (
     VARIANTS,
     ModelUnavailable,
@@ -44,11 +44,7 @@ def initialize_runtime(data, root):
     data.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("YOLO_CONFIG_DIR", str(data / "ultralytics"))
     os.environ.setdefault("MPLCONFIGDIR", str(data / "matplotlib"))
-    uploads = data / "uploads"
-    uploads.mkdir(exist_ok=True)
-    database = data / "dashboard.sqlite3"
-    storage.initialize(database)
-    return database, uploads, Predictor(root)
+    return Predictor(root)
 
 
 def runtime():
@@ -81,12 +77,6 @@ def health(request):
 
 def models(request):
     return JsonResponse(dict(items=catalog(settings.REPO_ROOT)))
-
-
-def dashboard(request):
-    return JsonResponse(
-        dict(**storage.summary(runtime()[0]), models=catalog(settings.REPO_ROOT))
-    )
 
 
 def dataset_images(request):
@@ -141,80 +131,6 @@ def dataset_image(request, label, filename):
     return send_file(path, mimetype=mimetype)
 
 
-def filters(request):
-    label = request.GET.get("label", "")
-    model = request.GET.get("model", "")
-    if label not in ("", "normal", "osteoporosis") or model not in ("", *VARIANTS):
-        abort(400, description="Filter kelas atau model tidak valid.")
-    return {
-        "search": request.GET.get("search", "")[:200],
-        "label": label,
-        "model": model,
-    }
-
-
-def predictions(request):
-    try:
-        page = int(request.GET.get("page", 1))
-        per_page = int(request.GET.get("per_page", 10))
-        if page < 1 or not 1 <= per_page <= 100:
-            raise ValueError
-    except ValueError:
-        abort(
-            400,
-            description="Halaman harus positif dan jumlah per halaman antara 1 dan 100.",
-        )
-    return JsonResponse(
-        storage.history(runtime()[0], **filters(request), page=page, per_page=per_page)
-    )
-
-
-def export(request):
-    selected = filters(request)
-    columns = [
-        "id",
-        "filename",
-        "model",
-        "label",
-        "confidence",
-        "inference_ms",
-        "created_at",
-    ]
-
-    def generate():
-        output = io.StringIO(newline="")
-        writer = csv.writer(output)
-        writer.writerow(columns)
-        yield "\ufeff" + output.getvalue()
-        page = 1
-        while True:
-            result = storage.history(runtime()[0], **selected, page=page, per_page=100)
-            for row in result["items"]:
-                output.seek(0)
-                output.truncate(0)
-                values = [row[column] for column in columns]
-                values = [
-                    (
-                        "'" + value
-                        if isinstance(value, str)
-                        and value.lstrip().startswith(("=", "+", "-", "@"))
-                        else value
-                    )
-                    for value in values
-                ]
-                writer.writerow(values)
-                yield output.getvalue()
-            if page * 100 >= result["total"]:
-                break
-            page += 1
-
-    return StreamingHttpResponse(
-        generate(),
-        content_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="riwayat-analisis.csv"'},
-    )
-
-
 def predict(request):
     variant = request.POST.get("model", "nano")
     if variant not in VARIANTS:
@@ -250,7 +166,7 @@ def predict(request):
             400,
             description="Citra tidak dapat dibaca. Gunakan berkas PNG atau JPEG yang valid.",
         )
-    database, uploads, predictor = runtime()
+    predictor = runtime()
     try:
         result = (settings.PREDICTOR or predictor).predict(image, variant)
     except ModelUnavailable as error:
@@ -258,49 +174,19 @@ def predict(request):
         return JsonResponse({"error": str(error)}, status=503)
 
     prediction_id = uuid.uuid4().hex
-    image_name = f"{prediction_id}.png"
-    image_path = uploads / image_name
     item = {
         "id": prediction_id,
         "filename": safe_filename(file.name)[:180] or "citra.png",
-        "image_name": image_name,
         "width": image.width,
         "height": image.height,
         "model": variant,
         **result,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
     }
-    try:
-        image.save(image_path, "PNG")
-        storage.save(database, item)
-    except Exception:
-        image_path.unlink(missing_ok=True)
-        raise
-    return JsonResponse(
-        storage.serialize(storage.find(database, prediction_id)), status=201
-    )
-
-
-def detail(request, prediction_id):
-    row = storage.find(runtime()[0], prediction_id)
-    if row is None:
-        abort(404)
-    return JsonResponse(storage.serialize(row))
-
-
-def delete_prediction(request, prediction_id):
-    if not storage.delete(runtime()[0], prediction_id, runtime()[1]):
-        abort(404)
-    return JsonResponse(
-        {"message": "Riwayat analisis dan citra tersimpan berhasil dihapus."}
-    )
-
-
-def prediction_image(request, prediction_id):
-    row = storage.find(runtime()[0], prediction_id)
-    if row is None:
-        abort(404)
-    return send_from_directory(runtime()[1], row["image_name"], mimetype="image/png")
+    output = io.BytesIO()
+    image.save(output, "PNG")
+    item["image_url"] = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+    return JsonResponse(item, status=201)
 
 
 def artifact(request, variant, filename):

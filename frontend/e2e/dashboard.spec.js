@@ -26,9 +26,9 @@ test("sidebar mengikuti urutan baru dan analisis hanya memuat unggahan serta has
   await expect(page.locator(".wordmark")).toContainText("Classify");
   await expect(page.locator(".wordmark")).toContainText("Osteoporosis");
   await expect(page.locator(".sidebar nav > .nav-group > a")).toHaveText([
-    "Evaluasi model",
-    "Dataset",
     "Analisis citra",
+    "Dataset",
+    "Evaluasi model",
     "Riwayat0",
   ]);
   await expect(
@@ -189,6 +189,9 @@ test("unggahan valid menjalankan model asli, menyimpan, memfilter, dan mengekspo
   expect(download.suggestedFilename()).toBe("riwayat-analisis.csv");
   const csv = await fs.readFile(await download.path(), "utf8");
   expect(csv).toContain("val_batch0_labels.jpg");
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("classify-osteoporosis-history-v1")));
+  expect(saved.items).toHaveLength(1);
+  expect(saved.items[0].image_url).toMatch(/^data:image\/png;base64,/);
   await page.getByRole("link", { name: "Analisis citra", exact: true }).click();
   await expect(page.locator(".result-content")).toBeVisible();
   await page.getByRole("button", { name: "Hapus pilihan" }).click();
@@ -198,6 +201,9 @@ test("unggahan valid menjalankan model asli, menyimpan, memfilter, dan mengekspo
   await expect(
     page.getByRole("button", { name: "Jalankan analisis" }),
   ).toBeDisabled();
+  await page.goto("/#riwayat");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Detail val_batch0_labels.jpg" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -294,172 +300,100 @@ test("validasi citra dan kegagalan inferensi memberi pesan yang bisa ditindaklan
 });
 
 test("koneksi dashboard yang gagal dapat dicoba kembali", async ({ page }) => {
-  await page.route("**/api/dashboard", (route) => route.abort());
+  await page.route("**/api/models", (route) => route.abort());
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("Tidak dapat terhubung");
-  await page.unroute("**/api/dashboard");
+  await page.unroute("**/api/models");
   await page.getByRole("button", { name: "Coba lagi" }).click();
   await expect(
     page.getByRole("heading", { name: "Citra untuk dianalisis", level: 2 }),
   ).toBeVisible();
 });
 
-test("hapus riwayat mendukung batal, Escape, kegagalan, dan konfirmasi", async ({
-  page,
-}) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  const before = await (await page.request.get("/api/dashboard")).json();
-  await page.request.get('/api/health');
-  const cookies = await page.context().cookies();
-  const token = cookies.find(cookie => cookie.name === 'csrftoken').value;
-  const response = await page.request.post("/api/predictions", {
-    headers: { 'X-CSRFToken': token },
-    multipart: {
-      model: "nano",
-      image: {
-        name: "hapus-riwayat.jpg",
-        mimeType: "image/jpeg",
-        buffer: await fs.readFile(image),
-      },
-    },
-  });
-  expect(response.status()).toBe(201);
-  const item = await response.json();
+const storedItem = {
+  id: "local-1", filename: "browser.png", model: "nano", label: "normal",
+  confidence: 0.8, probabilities: { normal: 0.8, osteoporosis: 0.2 },
+  inference_ms: 12.5, width: 64, height: 64,
+  created_at: "2026-10-26T08:00:00.000Z",
+  image_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+};
+
+async function seedHistory(page, items) {
+  await page.goto("/");
+  await page.evaluate(items => localStorage.setItem("classify-osteoporosis-history-v1", JSON.stringify({ version: 1, items })), items);
   await page.goto("/#riwayat");
-  await page.getByLabel("Cari citra").fill(item.filename);
-  const remove = page.getByRole("button", {
-    name: `Hapus ${item.filename}`,
-    exact: true,
-  });
+  await page.reload();
+}
+
+test("riwayat bertahan setelah reload, terisolasi, dan sinkron antar tab", async ({ page, context, browser }) => {
+  await seedHistory(page, [storedItem]);
+  await expect(page.getByRole("button", { name: "Detail browser.png" })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".nav-count")).toHaveText("1");
+  const other = await browser.newContext();
+  const isolated = await other.newPage();
+  await isolated.goto("http://127.0.0.1:5001/#riwayat");
+  await expect(isolated.locator(".nav-count")).toHaveText("0");
+  await other.close();
+  const second = await context.newPage();
+  await second.goto("/#riwayat");
+  await expect(second.locator(".nav-count")).toHaveText("1");
+  await page.getByRole("button", { name: "Hapus browser.png", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Hapus riwayat analisis?" });
-  await remove.click();
-  await expect(dialog.getByRole("button", { name: "Batal" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
-  await expect(remove).toBeFocused();
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Hapus browser.png", exact: true }).click();
   await dialog.getByRole("button", { name: "Batal" }).click();
-  await expect(dialog).not.toBeVisible();
-  expect((await page.request.get(`/api/predictions/${item.id}`)).status()).toBe(
-    200,
-  );
-
-  const endpoint = `**/api/predictions/${item.id}`;
-  await page.route(endpoint, (route) =>
-    route.fulfill({
-      status: 500,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: "Riwayat belum dapat dihapus. Coba lagi.",
-      }),
-    }),
-  );
-  await remove.click();
-  await dialog
-    .getByRole("button", { name: "Hapus riwayat", exact: true })
-    .click();
-  await expect(dialog.getByRole("alert")).toContainText("belum dapat dihapus");
-  await expect(
-    dialog.getByRole("button", { name: "Hapus riwayat", exact: true }),
-  ).toBeEnabled();
-  expect((await page.request.get(`/api/predictions/${item.id}`)).status()).toBe(
-    200,
-  );
-  await page.unroute(endpoint);
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(results.violations).toEqual([]);
-  await fs.mkdir(artifact, { recursive: true });
-  await page.screenshot({
-    path: `${artifact}/history-delete.png`,
-    fullPage: true,
-  });
-
-  let releaseDelete;
-  const deleteReady = new Promise((resolve) => {
-    releaseDelete = resolve;
-  });
-  await page.route(endpoint, async (route) => {
-    await deleteReady;
-    await route.continue();
-  });
-  await dialog
-    .getByRole("button", { name: "Hapus riwayat", exact: true })
-    .click();
-  await expect(
-    dialog.getByRole("button", { name: "Menghapus…", exact: true }),
-  ).toBeDisabled();
-  await expect(dialog.getByRole("button", { name: "Batal" })).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeVisible();
-  releaseDelete();
-  await expect(dialog).not.toBeVisible();
-  await expect(
-    page.getByRole("status").filter({ hasText: "berhasil dihapus" }),
-  ).toBeVisible();
-  await expect(page.getByText("Tidak ada hasil yang cocok")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Analisis tersimpan" }),
-  ).toBeFocused();
-  await expect(page.locator(".nav-count")).toHaveText(String(before.total));
-  expect((await page.request.get(item.image_url)).status()).toBe(404);
-  expect((await page.request.get(`/api/predictions/${item.id}`)).status()).toBe(
-    404,
-  );
-  const after = await (await page.request.get("/api/dashboard")).json();
-  expect(after.total).toBe(before.total);
-  expect(errors).toEqual([]);
+  await page.getByRole("button", { name: "Hapus browser.png", exact: true }).click();
+  const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  expect(audit.violations).toEqual([]);
+  await dialog.getByRole("button", { name: "Hapus riwayat", exact: true }).click();
+  await expect(page.locator(".nav-count")).toHaveText("0");
+  await expect(second.locator(".nav-count")).toHaveText("0");
+  await page.reload();
+  await expect(page.locator(".nav-count")).toHaveText("0");
 });
 
-test("hapus baris terakhir pada halaman akhir kembali ke halaman sebelumnya", async ({
-  page,
-}) => {
-  const dashboard = await (await page.request.get("/api/dashboard")).json();
-  let items = Array.from({ length: 11 }, (_, index) => ({
-    id: `pagination-${index}`,
-    filename: `halaman-${index}.jpg`,
-    image_url: "/api/models/nano/artifacts/confusion_matrix.png",
-    model: "nano",
-    label: "normal",
-    confidence: 0.8,
-    created_at: "2026-10-26T08:00:00+00:00",
-  }));
-  await page.route("**/api/dashboard", (route) =>
-    route.fulfill({ json: { ...dashboard, total: items.length } }),
-  );
-  await page.route("**/api/predictions?*", (route) => {
-    const current = Number(
-      new URL(route.request().url()).searchParams.get("page"),
-    );
-    return route.fulfill({
-      json: {
-        items: items.slice((current - 1) * 10, current * 10),
-        total: items.length,
-        page: current,
-        per_page: 10,
-      },
-    });
+test("gagal menyimpan atau menghapus tidak menimpa riwayat lama", async ({ page }) => {
+  await seedHistory(page, [storedItem]);
+  await page.evaluate(() => {
+    window.originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new DOMException("Full", "QuotaExceededError"); };
   });
-  await page.route("**/api/predictions/pagination-10", (route) => {
-    items = items.filter((item) => item.id !== "pagination-10");
-    return route.fulfill({ json: { message: "Riwayat dihapus." } });
-  });
-  await page.goto("/#riwayat");
+  await page.getByRole("button", { name: "Hapus browser.png", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Hapus riwayat analisis?" });
+  await dialog.getByRole("button", { name: "Hapus riwayat", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("belum tersimpan");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("classify-osteoporosis-history-v1")).items.length)).toBe(1);
+  await dialog.getByRole("button", { name: "Batal" }).click();
+  await page.getByRole("link", { name: "Analisis citra", exact: true }).click();
+  await page.route("**/api/predictions", route => route.fulfill({ json: { ...storedItem, id: "new-result" }, status: 201 }));
+  await page.getByLabel("Pilih citra X-ray").setInputFiles(image);
+  await page.getByRole("button", { name: "Jalankan analisis" }).click();
+  await expect(page.getByRole("alert")).toContainText("belum tersimpan");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("classify-osteoporosis-history-v1")).items[0].id)).toBe(storedItem.id);
+});
+
+test("riwayat rusak tidak ditimpa dan aplikasi tetap bisa dibuka", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("classify-osteoporosis-history-v1", "broken-json"));
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("Data lama tidak ditimpa");
+  await expect(page.getByRole("heading", { name: "Citra untuk dianalisis" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("classify-osteoporosis-history-v1"))).toBe("broken-json");
+});
+
+test("hapus baris terakhir pada halaman akhir kembali ke halaman sebelumnya", async ({ page }) => {
+  await seedHistory(page, Array.from({ length: 11 }, (_, index) => ({
+    ...storedItem, id: `pagination-${index}`, filename: `halaman-${index}.jpg`,
+    created_at: new Date(Date.UTC(2026, 9, 26, 8, 0, 11 - index)).toISOString(),
+  })));
   await page.getByRole("button", { name: "Berikutnya" }).click();
   await expect(page.getByText("Halaman 2 dari 2")).toBeVisible();
-  await page
-    .getByRole("button", { name: "Hapus halaman-10.jpg", exact: true })
-    .click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Hapus riwayat", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Hapus halaman-10.jpg", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Hapus riwayat", exact: true }).click();
   await expect(page.getByText("Halaman 1 dari 1")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Detail halaman-0.jpg" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Detail halaman-0.jpg" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Berikutnya" })).toBeDisabled();
 });
 

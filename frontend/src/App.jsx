@@ -8,11 +8,12 @@ import Analysis from "./pages/Analysis.jsx";
 import Dataset from "./pages/Dataset.jsx";
 import Evaluation from "./pages/Evaluation.jsx";
 import History from "./pages/History.jsx";
+import { readHistory, STORAGE_KEY } from "./history.js";
 
 const pages = [
-  { id: "evaluasi", title: "Evaluasi model" },
-  { id: "dataset", title: "Dataset" },
   { id: "analisis", title: "Analisis citra" },
+  { id: "dataset", title: "Dataset" },
+  { id: "evaluasi", title: "Evaluasi model" },
   { id: "riwayat", title: "Riwayat" },
 ];
 
@@ -51,6 +52,14 @@ export default function App() {
   const restoreMenuFocus = useRef(true);
   const previousRoute = useRef(route);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
+
+  useEffect(() => {
+    const onStorage = event => {
+      if (event.key === STORAGE_KEY || event.key === null) reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [reload]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 879px)");
@@ -137,8 +146,16 @@ export default function App() {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    requestJSON("/api/dashboard", { signal: controller.signal })
-      .then(setData)
+    requestJSON("/api/models", { signal: controller.signal })
+      .then(result => {
+        let total = 0;
+        try {
+          total = readHistory().length;
+        } catch (failure) {
+          setError(errorMessage(failure));
+        }
+        setData({ models: result.items, total });
+      })
       .catch((failure) => {
         if (failure.name !== "AbortError") setError(errorMessage(failure));
       })

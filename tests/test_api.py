@@ -1,6 +1,5 @@
-import csv
+import base64
 import io
-from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -146,20 +145,17 @@ def test_dataset_updates_metadata_when_file_changes(dataset_client, app):
     assert data["total"] == 1 and data["unreadable"] == 2
 
 
-def test_empty_dashboard_uses_repository_metrics(client):
-    data = client.get("/api/dashboard").json()
-    assert data["total"] == 0
-    assert data["avg_confidence"] is None
-    assert len(data["activity"]) == 7
-    assert len(data["models"]) == 5
-    nano = data["models"][0]
+def test_models_use_repository_metrics(client):
+    data = client.get("/api/models").json()
+    assert len(data["items"]) == 5
+    nano = data["items"][0]
     assert nano["epochs"] == 60
     assert nano["best_accuracy"] == pytest.approx(0.85714)
     assert nano["best_epoch"] == 26
     assert len(nano["series"]) == 60
 
 
-def test_upload_persists_result_image_and_statistics(client, app, app_factory):
+def test_upload_returns_normalized_image_without_server_storage(client, app):
     response = upload(client)
     assert response.status_code == 201
     data = response.json()
@@ -167,85 +163,18 @@ def test_upload_persists_result_image_and_statistics(client, app, app_factory):
     assert data["probabilities"]["osteoporosis"] == 0.2
     assert (data["width"], data["height"]) == (64, 64)
     assert "image_name" not in data
-    assert (
-        client.get(data["image_url"]).headers["Content-Type"].split(";")[0]
-        == "image/png"
-    )
-    assert client.get(f"/api/predictions/{data['id']}").json() == data
-    stats = client.get("/api/dashboard").json()
-    assert stats["total"] == stats["normal"] == 1
-    assert stats["osteoporosis"] == 0
-    assert stats["avg_confidence"] == 0.8
-    assert stats["activity"][-1]["count"] == 1
-    second = app_factory(
-        **{
-            "DATA_DIR": app.DATA_DIR,
-            "PREDICTOR": FixedPredictor(),
-        }
-    )
-    assert Client().get("/api/predictions").json()["total"] == 1
+    prefix, encoded = data["image_url"].split(",", 1)
+    assert prefix == "data:image/png;base64"
+    image = Image.open(io.BytesIO(base64.b64decode(encoded)))
+    assert image.mode == "RGB" and image.size == (64, 64)
+    assert not list(app.DATA_DIR.rglob("*.sqlite3"))
+    assert not (app.DATA_DIR / "uploads").exists()
+    assert client.get(f"/api/predictions/{data['id']}").status_code == 404
 
 
-def test_delete_removes_only_selected_history_and_image(client, app, app_factory):
-    removed = upload(client, "remove.png").json()
-    kept = upload(client, "keep.png").json()
-    image_path = app.DATA_DIR / "uploads" / f"{removed['id']}.png"
-    response = client.delete(f"/api/predictions/{removed['id']}")
-    assert response.status_code == 200
-    assert not image_path.exists()
-    assert client.get(f"/api/predictions/{removed['id']}").status_code == 404
-    assert client.get(removed["image_url"]).status_code == 404
-    assert client.get(kept["image_url"]).status_code == 200
-    history = client.get("/api/predictions").json()
-    assert history["total"] == 1
-    assert [item["id"] for item in history["items"]] == [kept["id"]]
-    stats = client.get("/api/dashboard").json()
-    assert stats["total"] == stats["normal"] == 1
-    assert stats["activity"][-1]["count"] == 1
-    assert [item["id"] for item in stats["recent"]] == [kept["id"]]
-    csv_data = content(client.get("/api/predictions/export")).decode("utf-8-sig")
-    assert "remove.png" not in csv_data and "keep.png" in csv_data
-    second = app_factory(
-        **{
-            "DATA_DIR": app.DATA_DIR,
-            "PREDICTOR": FixedPredictor(),
-        }
-    )
-    assert Client().get("/api/predictions").json()["total"] == 1
-    assert client.delete(f"/api/predictions/{removed['id']}").status_code == 404
-
-
-def test_delete_last_history_with_missing_image(client, app):
-    item = upload(client).json()
-    (app.DATA_DIR / "uploads" / f"{item['id']}.png").unlink()
-    assert client.delete(f"/api/predictions/{item['id']}").status_code == 200
-    stats = client.get("/api/dashboard").json()
-    assert stats["total"] == 0
-    assert stats["recent"] == []
-    assert stats["avg_confidence"] is None
-
-
-def test_delete_unknown_history_returns_json(client):
-    response = client.delete("/api/predictions/missing")
-    assert response.status_code == 404
-    assert response.headers["Content-Type"].startswith("application/json")
-
-
-def test_delete_image_failure_keeps_record(client, app, monkeypatch):
-    item = upload(client).json()
-    image_path = app.DATA_DIR / "uploads" / f"{item['id']}.png"
-    original_unlink = Path.unlink
-
-    def fail_image_unlink(path, *args, **kwargs):
-        if path == image_path:
-            raise PermissionError("Cannot remove image")
-        return original_unlink(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "unlink", fail_image_unlink)
-    assert client.delete(f"/api/predictions/{item['id']}").status_code == 500
-    assert image_path.exists()
-    assert client.get(f"/api/predictions/{item['id']}").status_code == 200
-    assert client.get("/api/predictions").json()["total"] == 1
+@pytest.mark.parametrize("path", ["/api/dashboard", "/api/predictions/export", "/api/predictions/missing", "/api/predictions/missing/image"])
+def test_history_is_browser_only(client, path):
+    assert client.get(path).status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -268,7 +197,7 @@ def test_rejects_invalid_uploads(client, payload, message):
     response = client.post("/api/predictions", data=payload)
     assert response.status_code == 400
     assert message in response.json()["error"]
-    assert client.get("/api/predictions").json()["total"] == 0
+    assert client.get("/api/predictions").status_code == 405
 
 
 def test_upload_limit_is_json(client):
@@ -302,31 +231,8 @@ def test_model_failure_does_not_save_image_or_record(tmp_path, app_factory):
     response = upload(client)
     assert response.status_code == 503
     assert response.json()["error"] == "Bobot tidak tersedia."
-    assert not list((tmp_path / "uploads").iterdir())
-    assert client.get("/api/predictions").json()["total"] == 0
-
-
-def test_search_filters_pagination_and_csv(client):
-    upload(client, "knee-first.png")
-    upload(client, "knee-second.png")
-    assert client.get("/api/predictions?search=second").json()["total"] == 1
-    assert client.get("/api/predictions?search=%25").json()["total"] == 0
-    assert client.get("/api/predictions?label=osteoporosis").json()["total"] == 0
-    assert client.get("/api/predictions?model=small").json()["total"] == 0
-    page = client.get("/api/predictions?per_page=1&page=2").json()
-    assert page["total"] == 2 and len(page["items"]) == 1
-    assert page["items"][0]["filename"] == "knee-first.png"
-    response = client.get("/api/predictions/export?search=second")
-    assert response.headers["Content-Type"].split(";")[0] == "text/csv"
-    rows = list(csv.DictReader(io.StringIO(content(response).decode("utf-8-sig"))))
-    assert len(rows) == 1 and rows[0]["filename"] == "knee-second.png"
-
-
-@pytest.mark.parametrize(
-    "query", ["page=0", "page=hi", "per_page=101", "label=fake", "model=unknown"]
-)
-def test_invalid_history_filters(client, query):
-    assert client.get("/api/predictions?" + query).status_code == 400
+    assert not (tmp_path / "uploads").exists()
+    assert client.get("/api/predictions").status_code == 405
 
 
 def test_unknown_api_paths_stay_json(client):
@@ -369,7 +275,7 @@ def test_frontend_build_and_assets_are_served(tmp_path, app_factory):
     assert client.get("/api/missing").status_code == 404
 
 
-def test_csrf_required_for_upload_and_delete(app):
+def test_csrf_required_for_upload(app):
     client = Client(enforce_csrf_checks=True)
     assert upload(client).status_code == 403
     assert client.get("/api/health").status_code == 200
@@ -383,10 +289,6 @@ def test_csrf_required_for_upload_and_delete(app):
         HTTP_X_CSRFTOKEN=token,
     )
     assert response.status_code == 201
-    path = "/api/predictions/" + response.json()["id"]
-    assert client.delete(path).status_code == 403
-    assert client.delete(path, HTTP_X_CSRFTOKEN=token).status_code == 200
-
 
 def test_csrf_rejects_foreign_origin(app):
     client = Client(enforce_csrf_checks=True)
@@ -436,11 +338,3 @@ def test_non_file_form_limit_returns_json(client):
     response = client.post("/api/predictions", data={"model": "x" * (513 * 1024)})
     assert response.status_code == 400
     assert "error" in response.json()
-
-
-def test_history_survives_runtime_restart(client, app):
-    from backend.views import initialize_runtime
-
-    item = upload(client).json()
-    initialize_runtime.cache_clear()
-    assert client.get("/api/predictions/" + item["id"]).json() == item

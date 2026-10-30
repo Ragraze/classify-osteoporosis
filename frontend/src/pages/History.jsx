@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, number, requestJSON } from "../api.js";
+import { errorMessage, number } from "../api.js";
+import { historyCSV, queryHistory } from "../history.js";
 import { Loading, Message } from "../components/Feedback.jsx";
 import { ModelSelect } from "../components/ModelSelect.jsx";
 import { PredictionsTable } from "../components/PredictionsTable.jsx";
@@ -27,15 +28,16 @@ export default function History({ revision, models, onDetail, onChange }) {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({
+    const filters = {
       search: debounced,
       label,
       model,
       page,
       per_page: 10,
-    });
-    requestJSON(`/api/predictions?${params}`, { signal: controller.signal })
+    };
+    Promise.resolve().then(() => queryHistory(filters))
       .then((result) => {
+        if (controller.signal.aborted) return;
         const lastPage = Math.max(1, Math.ceil(result.total / result.per_page));
         if (page > lastPage) {
           setPage(lastPage);
@@ -44,7 +46,7 @@ export default function History({ revision, models, onDetail, onChange }) {
         }
       })
       .catch((failure) => {
-        if (failure.name !== "AbortError") setError(errorMessage(failure));
+        if (!controller.signal.aborted) setError(errorMessage(failure));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -55,12 +57,8 @@ export default function History({ revision, models, onDetail, onChange }) {
     setExporting(true);
     setError("");
     try {
-      const response = await fetch(
-        `/api/predictions/export?${new URLSearchParams({ search: debounced, label, model })}`,
-        { signal: AbortSignal.timeout(30000) },
-      );
-      if (!response.ok) throw new Error("Ekspor CSV gagal. Coba lagi.");
-      const url = URL.createObjectURL(await response.blob());
+      const csv = historyCSV({ search: debounced, label, model });
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
       link.download = "riwayat-analisis.csv";
@@ -95,6 +93,7 @@ export default function History({ revision, models, onDetail, onChange }) {
                 ? `${number(data.total)} hasil${filtered ? " sesuai filter" : ""}`
                 : "Memuat jumlah hasil…"}
             </p>
+            <p>Riwayat disimpan di browser ini. Menghapus data situs akan menghapus riwayat dan citra tersimpan.</p>
           </div>
           <button
             className="button secondary"

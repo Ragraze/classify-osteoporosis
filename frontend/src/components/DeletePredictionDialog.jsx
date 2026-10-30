@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { errorMessage, requestJSON } from "../api.js";
+import { errorMessage } from "../api.js";
+import { deletePrediction } from "../history.js";
 import { Message } from "./Feedback.jsx";
 
 export function DeletePredictionDialog({ item, onClose, onDeleted }) {
@@ -23,7 +24,7 @@ export function DeletePredictionDialog({ item, onClose, onDeleted }) {
     setDeleting(true);
     setError("");
     try {
-      await requestJSON(`/api/predictions/${item.id}`, { method: "DELETE" });
+      deletePrediction(item.id);
       dialog.current.close();
       onDeleted(item);
     } catch (failure) {

@@ -13,7 +13,7 @@ test('Swagger loads locally and executes health requests', async ({ page }) => {
   });
   await page.goto('/api/docs');
   await expect(page.getByRole('heading', { name: 'Classify Osteoporosis API' })).toBeVisible();
-  await expect(page.locator('.opblock')).toHaveCount(12);
+  await expect(page.locator('.opblock')).toHaveCount(6);
   const health = page.locator('#operations-Status-get_api_health');
   await health.locator('.opblock-summary').click();
   await health.getByRole('button', { name: 'Try it out' }).click();

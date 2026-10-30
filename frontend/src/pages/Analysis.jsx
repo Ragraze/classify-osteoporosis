@@ -3,6 +3,7 @@ import { errorMessage, number, requestJSON } from "../api.js";
 import { Loading, Message } from "../components/Feedback.jsx";
 import { ModelSelect } from "../components/ModelSelect.jsx";
 import { Result } from "../components/Result.jsx";
+import { savePrediction } from "../history.js";
 
 export default function Analysis({ models, onPrediction }) {
   const input = useRef(null);
@@ -83,6 +84,7 @@ export default function Analysis({ models, onPrediction }) {
         method: "POST",
         body: payload,
       });
+      savePrediction(prediction);
       setResult(prediction);
       onPrediction();
     } catch (failure) {
